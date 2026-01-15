@@ -1,4 +1,8 @@
 {
+  
+  "type": "module",
+  "main": "./src/main.tsx",
+  
   "name": "crypto-nexus-frontend",
   "version": "1.0.0",
   "private": true,
@@ -35,4 +39,5 @@
     "typescript": "^5.0.2",
     "vite": "^5.0.0"
   }
+  
 }
