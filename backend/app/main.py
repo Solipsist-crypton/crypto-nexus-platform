@@ -4,8 +4,9 @@ import logging
 
 # Додаємо ці імпорти:
 from .database import engine, Base
-from . import models
-from .api import arbitrage  # Імпортуємо наш арбітражний роутер
+# ІМПОРТУЄМО МОДЕЛІ
+from .models import arbitrage as arbitrage_models
+from .api import arbitrage as arbitrage_api
 
 logging.basicConfig(
     level=logging.INFO,
@@ -13,7 +14,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Створюємо таблиці в базі даних (автоматично при запуску)
+# Створюємо таблиці в базі даних
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -31,7 +32,7 @@ app.add_middleware(
 )
 
 # Реєструємо роутер арбітражу
-app.include_router(arbitrage.router)
+app.include_router(arbitrage_api.router)
 
 @app.get("/")
 async def root():

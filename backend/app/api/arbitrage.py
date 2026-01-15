@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from .. import models, schemas
 from ..database import get_db
+from ..models.arbitrage import ArbitrageOpportunity
+from ..schemas.arbitrage import ArbitrageOpportunityCreate, ArbitrageOpportunity
 
 router = APIRouter(prefix="/api/arbitrage", tags=["arbitrage"])
 
-@router.get("/opportunities", response_model=List[schemas.ArbitrageOpportunity])
+@router.get("/opportunities", response_model=List[ArbitrageOpportunity])
 def get_opportunities(
     db: Session = Depends(get_db),
     skip: int = 0,
@@ -14,16 +15,13 @@ def get_opportunities(
     min_profit: Optional[float] = Query(1.0, description="Мінімальний прибуток у %"),
     base_currency: Optional[str] = None
 ):
-    """
-    Отримати список арбітражних можливостей
-    """
-    query = db.query(models.ArbitrageOpportunity).filter(
-        models.ArbitrageOpportunity.price_difference >= min_profit,
-        models.ArbitrageOpportunity.is_opportunity == True
+    query = db.query(ArbitrageOpportunity).filter(
+        ArbitrageOpportunity.price_difference >= min_profit,
+        ArbitrageOpportunity.is_opportunity == True
     )
     
     if base_currency:
-        query = query.filter(models.ArbitrageOpportunity.base_currency == base_currency)
+        query = query.filter(ArbitrageOpportunity.base_currency == base_currency)
     
     return query.offset(skip).limit(limit).all()
 
