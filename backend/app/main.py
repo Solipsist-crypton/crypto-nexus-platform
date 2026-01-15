@@ -2,11 +2,19 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
 
+# Додаємо ці імпорти:
+from .database import engine, Base
+from . import models
+from .api import arbitrage  # Імпортуємо наш арбітражний роутер
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Створюємо таблиці в базі даних (автоматично при запуску)
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Crypto Nexus Platform API",
@@ -22,6 +30,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Реєструємо роутер арбітражу
+app.include_router(arbitrage.router)
+
 @app.get("/")
 async def root():
     return {"message": "Crypto Nexus Platform API", "version": "1.0.0"}
@@ -30,8 +41,3 @@ async def root():
 async def health_check():
     from datetime import datetime
     return {"status": "healthy", "timestamp": datetime.utcnow().isoformat() + "Z"}
-
-# Файл НЕ повинен містити цього блоку:
-# if __name__ == "__main__":
-#     import uvicorn
-#     uvicorn.run(...)
