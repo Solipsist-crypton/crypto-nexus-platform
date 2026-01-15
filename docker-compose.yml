@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: crypto_user
+      POSTGRES_PASSWORD: crypto_pass
+      POSTGRES_DB: crypto_nexus
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - crypto-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - crypto-network
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://crypto_user:crypto_pass@postgres:5432/crypto_nexus
+      REDIS_URL: redis://redis:6379/0
+      COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - crypto-network
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    networks:
+      - crypto-network
+
+volumes:
+  postgres_data:
+
+networks:
+  crypto-network:
+    driver: bridge
