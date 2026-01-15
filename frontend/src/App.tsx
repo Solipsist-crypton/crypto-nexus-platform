@@ -1,31 +1,22 @@
-import React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
-import Layout from './components/Layout';
-import Dashboard from './pages/Dashboard';
-import Arbitrage from './pages/Arbitrage';
-import Futures from './pages/Futures';
-import Airdrops from './pages/Airdrops';
-
-const queryClient = new QueryClient();
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import Layout from './components/Layout.tsx';
+import Dashboard from './pages/Dashboard.tsx';
+import Arbitrage from './pages/Arbitrage.tsx';
+import Futures from './pages/Futures.tsx';
+import Airdrops from './pages/Airdrops.tsx';
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <Router>
-        <Layout>
-          <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/arbitrage" element={<Arbitrage />} />
-            <Route path="/futures" element={<Futures />} />
-            <Route path="/airdrops" element={<Airdrops />} />
-          </Routes>
-        </Layout>
-        <Toaster position="top-right" />
-      </Router>
-    </QueryClientProvider>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Layout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="arbitrage" element={<Arbitrage />} />
+          <Route path="futures" element={<Futures />} />
+          <Route path="airdrops" element={<Airdrops />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }
 
