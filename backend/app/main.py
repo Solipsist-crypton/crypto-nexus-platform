@@ -1,12 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
-
 # Додаємо ці імпорти:
 from .database import engine, Base
 # ІМПОРТУЄМО МОДЕЛІ
 from .models import arbitrage as arbitrage_models
 from .api import arbitrage as arbitrage_api
+from .api import binance as binance_api
+from .api import kraken as kraken_api
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,6 +34,8 @@ app.add_middleware(
 
 # Реєструємо роутер арбітражу
 app.include_router(arbitrage_api.router)
+app.include_router(binance_api.router)
+app.include_router(kraken_api.router)
 
 @app.get("/")
 async def root():
