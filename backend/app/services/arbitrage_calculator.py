@@ -1,180 +1,154 @@
 import asyncio
 from typing import List, Dict, Optional, Tuple, Any
+from datetime import datetime
+
+# Імпортуємо клієнти для всіх бірж
 from app.exchanges.binance_client import BinanceClient
 from app.exchanges.kraken_client import KrakenClient
-from datetime import datetime
+from app.exchanges.coinbase_client import CoinbaseClient
+from app.exchanges.bybit_client import BybitClient
+from app.exchanges.okx_client import OKXClient
+
 from app.config.fees_config import get_trading_fee, get_withdrawal_fee, set_fee_mode, update_fee
 
 class ArbitrageCalculator:
     def __init__(self):
-        self.binance = BinanceClient()
-        self.kraken = KrakenClient()
-        
-        # Мапи символів для різних бірж
-        self.symbol_map = {
-            "BTC": {"binance": "BTCUSDT", "kraken": "XXBTZUSD"},
-            "ETH": {"binance": "ETHUSDT", "kraken": "XETHZUSD"},
-            "SOL": {"binance": "SOLUSDT", "kraken": "SOLUSD"}
+        # Ініціалізація всіх клієнтів бірж
+        self.exchanges = {
+            "Binance": BinanceClient(),
+            "Kraken": KrakenClient(),
+            "Coinbase": CoinbaseClient(),
+            "Bybit": BybitClient(),
+            "OKX": OKXClient()
         }
         
-        # Підтримувані монети
-        self.supported_coins = ["BTC", "ETH", "SOL"]
+        # Мапи символів для всіх бірж
+        self.symbol_map = {
+            "BTC": {
+                "Binance": "BTCUSDT",
+                "Kraken": "XXBTZUSD", 
+                "Coinbase": "BTC-USD",
+                "Bybit": "BTCUSDT",
+                "OKX": "BTC-USDT"
+            },
+            "ETH": {
+                "Binance": "ETHUSDT",
+                "Kraken": "XETHZUSD",
+                "Coinbase": "ETH-USD",
+                "Bybit": "ETHUSDT", 
+                "OKX": "ETH-USDT"
+            },
+            "SOL": {
+                "Binance": "SOLUSDT",
+                "Kraken": "SOLUSD",
+                "Coinbase": "SOL-USD",
+                "Bybit": "SOLUSDT",
+                "OKX": "SOL-USDT"
+            },
+            "BNB": {
+                "Binance": "BNBUSDT",
+                "Kraken": "BNBUSD",
+                "Coinbase": "BNB-USD",
+                "Bybit": "BNBUSDT",
+                "OKX": "BNB-USDT"
+            },
+            "XRP": {
+                "Binance": "XRPUSDT",
+                "Kraken": "XXRPZUSD",
+                "Coinbase": "XRP-USD",
+                "Bybit": "XRPUSDT",
+                "OKX": "XRP-USDT"
+            },
+            "ADA": {
+                "Binance": "ADAUSDT",
+                "Kraken": "ADAUSD",
+                "Coinbase": "ADA-USD",
+                "Bybit": "ADAUSDT",
+                "OKX": "ADA-USDT"
+            },
+            "DOT": {
+                "Binance": "DOTUSDT",
+                "Kraken": "DOTUSD",
+                "Coinbase": "DOT-USD",
+                "Bybit": "DOTUSDT",
+                "OKX": "DOT-USDT"
+            },
+            "DOGE": {
+                "Binance": "DOGEUSDT",
+                "Kraken": "XDGUSD",
+                "Coinbase": "DOGE-USD",
+                "Bybit": "DOGEUSDT",
+                "OKX": "DOGE-USDT"
+            },
+            "AVAX": {
+                "Binance": "AVAXUSDT",
+                "Kraken": "AVAXUSD",
+                "Coinbase": "AVAX-USD",
+                "Bybit": "AVAXUSDT",
+                "OKX": "AVAX-USDT"
+            },
+            "MATIC": {
+                "Binance": "MATICUSDT",
+                "Kraken": "MATICUSD",
+                "Coinbase": "MATIC-USD",
+                "Bybit": "MATICUSDT",
+                "OKX": "MATIC-USDT"
+            }
+        }
         
-        # Режим комісій (за замовчуванням taker)
+        # Підтримувані монети (10)
+        self.supported_coins = list(self.symbol_map.keys())
+        
+        # Підтримувані біржі (5)
+        self.supported_exchanges = list(self.exchanges.keys())
+        
+        # Режим комісій
         self.fee_mode = "taker"
         
-        # Налаштування ліквідності (тимчасові значення)
+        # Оцінки ліквідності (тимчасові)
+        self._init_liquidity_scores()
+
+    def _init_liquidity_scores(self):
+        """Ініціалізація базових оцінок ліквідності"""
         self.liquidity_scores = {
-            "Binance": {"BTC": 0.9, "ETH": 0.85, "SOL": 0.8},
-            "Kraken": {"BTC": 0.85, "ETH": 0.8, "SOL": 0.75}
+            "Binance": {coin: 0.9 for coin in self.supported_coins},
+            "Kraken": {coin: 0.85 for coin in self.supported_coins},
+            "Coinbase": {coin: 0.88 for coin in self.supported_coins},
+            "Bybit": {coin: 0.82 for coin in self.supported_coins},
+            "OKX": {coin: 0.84 for coin in self.supported_coins}
         }
 
     # ==================== ОСНОВНА ЛОГІКА ====================
 
-    async def calculate_real_arbitrage(self, coin: str, buy_exchange: str, 
-                                      sell_exchange: str, amount: float = 1.0) -> Dict:
-        """
-        Розрахунок реального арбітражу з усіма комісіями
-        Повертає детальний аналіз прибутковості
-        """
-        # Перевірка вхідних параметрів
-        if coin not in self.supported_coins:
-            return self._error_response(f"Монета {coin} не підтримується")
-        
-        if buy_exchange not in ["Binance", "Kraken"] or sell_exchange not in ["Binance", "Kraken"]:
-            return self._error_response("Непідтримувана біржа")
-        
-        # Отримати ціни з бірж
-        buy_price_data, sell_price_data = await self._fetch_prices_for_exchanges(
-            coin, buy_exchange, sell_exchange
-        )
-        
-        if not buy_price_data or not sell_price_data:
-            return self._error_response("Не вдалося отримати ціни з бірж")
-        
-        # Ціни
-        buy_price = buy_price_data["price"]
-        sell_price = sell_price_data["price"]
-        
-        # Розрахунок різниці цін
-        price_difference = sell_price - buy_price
-        price_difference_percent = (price_difference / buy_price) * 100 if buy_price > 0 else 0
-        
-        # Комісії
-        buy_fee_percent = get_trading_fee(buy_exchange, self.fee_mode)
-        sell_fee_percent = get_trading_fee(sell_exchange, self.fee_mode)
-        
-        # Комісії на вивід
-        withdrawal_fee_buy = get_withdrawal_fee(coin, buy_exchange)
-        withdrawal_fee_sell = get_withdrawal_fee(coin, sell_exchange)
-        
-        # Розрахунок P&L
-        buy_cost = buy_price * amount * (1 + buy_fee_percent/100)
-        sell_revenue = sell_price * amount * (1 - sell_fee_percent/100)
-        
-        # Врахувати вивід (конвертуємо в USD еквівалент)
-        withdrawal_fee_usd = (withdrawal_fee_buy + withdrawal_fee_sell) * buy_price
-        
-        net_profit = sell_revenue - buy_cost - withdrawal_fee_usd
-        net_profit_percent = (net_profit / buy_cost) * 100 if buy_cost > 0 else 0
-        
-        # Оцінка ліквідності та ризиків
-        buy_liquidity = self.get_liquidity_score(buy_exchange, coin)
-        sell_liquidity = self.get_liquidity_score(sell_exchange, coin)
-        avg_liquidity = (buy_liquidity + sell_liquidity) / 2
-        
-        # Визначення рівня ризику
-        risk_level = self._calculate_risk_level(avg_liquidity, net_profit_percent)
-        
-        # Критерій прибутковості (з урахуванням ризику)
-        min_profit_threshold = self._get_min_profit_threshold(risk_level)
-        is_profitable = net_profit_percent > min_profit_threshold
-        
-        # Формуємо відповідь
-        return {
-            # Основна інформація
-            "coin": coin,
-            "amount": amount,
-            "buy_exchange": buy_exchange,
-            "sell_exchange": sell_exchange,
-            "direction": f"{buy_exchange} → {sell_exchange}",
-            
-            # Ціни
-            "buy_price": round(buy_price, 2),
-            "sell_price": round(sell_price, 2),
-            "price_difference": round(price_difference, 2),
-            "price_difference_percent": round(price_difference_percent, 4),
-            
-            # Комісії
-            "buy_fee_percent": round(buy_fee_percent, 3),
-            "sell_fee_percent": round(sell_fee_percent, 3),
-            "withdrawal_fee_usd": round(withdrawal_fee_usd, 2),
-            
-            # Прибутковість
-            "buy_cost_usd": round(buy_cost, 2),
-            "sell_revenue_usd": round(sell_revenue, 2),
-            "net_profit_usd": round(net_profit, 2),
-            "net_profit_percent": round(net_profit_percent, 4),
-            
-            # Оцінка ризиків
-            "buy_liquidity_score": round(buy_liquidity, 2),
-            "sell_liquidity_score": round(sell_liquidity, 2),
-            "avg_liquidity_score": round(avg_liquidity, 2),
-            "risk_level": risk_level,
-            "is_profitable": is_profitable,
-            "min_profit_threshold": min_profit_threshold,
-            
-            # Метадані
-            "timestamp": datetime.utcnow().isoformat(),
-            "fee_mode": self.fee_mode,
-            "success": True
-        }
-
     async def compare_prices(self, coin: str = "BTC") -> Dict:
         """
-        Порівняти ціни на Binance та Kraken для однієї монети
-        Тепер використовує реальні комісії з fees_config
+        Порівняти ціни на всіх біржах для однієї монети
+        Повертає найкращу арбітражну можливість
         """
         if coin not in self.supported_coins:
             return self._error_response(f"Монета {coin} не підтримується")
         
-        # Отримання цін
-        binance_price, kraken_price = await self._fetch_prices(coin)
+        # Отримати ціни з усіх бірж
+        prices = await self._fetch_all_prices(coin)
         
-        if not binance_price or not kraken_price:
-            return self._error_response("Не вдалося отримати ціни з бірж")
+        if not prices:
+            return self._error_response("Не вдалося отримати ціни")
         
-        # Аналіз обох напрямків
-        binance_to_kraken = await self.calculate_real_arbitrage(
-            coin, "Binance", "Kraken", 1.0
-        )
-        
-        kraken_to_binance = await self.calculate_real_arbitrage(
-            coin, "Kraken", "Binance", 1.0
-        )
-        
-        # Визначаємо кращий напрямок
-        best_direction = None
-        if "net_profit_percent" in binance_to_kraken and "net_profit_percent" in kraken_to_binance:
-            if binance_to_kraken["net_profit_percent"] > kraken_to_binance["net_profit_percent"]:
-                best_direction = binance_to_kraken
-                best_direction["best_direction"] = "Binance → Kraken"
-            else:
-                best_direction = kraken_to_binance
-                best_direction["best_direction"] = "Kraken → Binance"
+        # Знайти найкращу арбітражну пару
+        best_opportunity = await self._find_best_arbitrage(coin, prices)
         
         return {
             "coin": coin,
-            "binance_price": round(binance_price.get("price", 0), 2),
-            "kraken_price": round(kraken_price.get("price", 0), 2),
-            "best_opportunity": best_direction,
+            "prices": prices,
+            "best_opportunity": best_opportunity if best_opportunity.get("is_profitable") else None,
+            "all_opportunities": self._filter_profitable_opportunities([best_opportunity]),
             "timestamp": datetime.utcnow().isoformat(),
             "success": True
         }
 
     async def scan_all_coins(self) -> List[Dict]:
         """
-        Сканувати всі монети та повертати детальний аналіз
+        Сканувати всі 10 монет на всіх 5 біржах
         """
         all_results = []
         
@@ -195,86 +169,161 @@ class ArbitrageCalculator:
         
         return all_results
 
+    async def find_top_opportunities(self, limit: int = 5) -> List[Dict]:
+        """
+        Знайти топ N арбітражних можливостей
+        """
+        all_opps = []
+        
+        for coin in self.supported_coins:
+            prices = await self._fetch_all_prices(coin)
+            if prices:
+                opportunity = await self._find_best_arbitrage(coin, prices)
+                if opportunity.get("is_profitable"):
+                    all_opps.append(opportunity)
+        
+        # Сортуємо та обмежуємо кількість
+        all_opps.sort(key=lambda x: x.get("net_profit_percent", 0), reverse=True)
+        return all_opps[:limit]
+
     # ==================== ДОПОМІЖНІ МЕТОДИ ====================
 
-    async def _fetch_prices_for_exchanges(self, coin: str, buy_exchange: str, 
-                                        sell_exchange: str) -> Tuple[Optional[Dict], Optional[Dict]]:
+    async def _fetch_all_prices(self, coin: str) -> Dict[str, float]:
         """
-        Отримати ціни для конкретних бірж
+        Отримати ціни з усіх 5 бірж для однієї монети
         """
-        try:
-            if buy_exchange == "Binance":
-                buy_task = self.binance.get_price(self.symbol_map[coin]["binance"])
-            else:
-                buy_task = self.kraken.get_price(self.symbol_map[coin]["kraken"])
-            
-            if sell_exchange == "Binance":
-                sell_task = self.binance.get_price(self.symbol_map[coin]["binance"])
-            else:
-                sell_task = self.kraken.get_price(self.symbol_map[coin]["kraken"])
-            
-            buy_price, sell_price = await asyncio.gather(buy_task, sell_task)
-            return buy_price, sell_price
-            
-        except Exception as e:
-            print(f"Помилка отримання цін для {coin}: {e}")
-            return None, None
+        prices = {}
+        
+        for exchange_name, client in self.exchanges.items():
+            try:
+                symbol = self.symbol_map[coin][exchange_name]
+                price_data = await client.get_price(symbol)
+                
+                if price_data and "price" in price_data:
+                    prices[exchange_name] = price_data["price"]
+                else:
+                    prices[exchange_name] = None
+                    
+            except Exception as e:
+                print(f"Помилка отримання ціни з {exchange_name} для {coin}: {e}")
+                prices[exchange_name] = None
+        
+        return prices
 
-    async def _fetch_prices(self, coin: str) -> Tuple[Optional[Dict], Optional[Dict]]:
+    async def _find_best_arbitrage(self, coin: str, prices: Dict[str, float]) -> Dict:
         """
-        Отримати ціни з Binance та Kraken
+        Знайти найкращу арбітражну пару серед всіх бірж
         """
-        try:
-            binance_symbol = self.symbol_map[coin]["binance"]
-            kraken_symbol = self.symbol_map[coin]["kraken"]
-            
-            binance_task = self.binance.get_price(binance_symbol)
-            kraken_task = self.kraken.get_price(kraken_symbol)
-            
-            binance_price, kraken_price = await asyncio.gather(binance_task, kraken_task)
-            return binance_price, kraken_price
-            
-        except Exception as e:
-            print(f"Помилка отримання цін для {coin}: {e}")
-            return None, None
+        best_opportunity = None
+        best_profit = -999
+        
+        # Перебираємо всі можливі пари бірж
+        exchanges = [ex for ex in prices.keys() if prices[ex] is not None]
+        
+        for i, buy_exchange in enumerate(exchanges):
+            for sell_exchange in exchanges[i+1:]:
+                # Аналізуємо обидва напрямки
+                for buy_ex, sell_ex in [(buy_exchange, sell_exchange), (sell_exchange, buy_exchange)]:
+                    if prices[buy_ex] and prices[sell_ex]:
+                        opportunity = await self.calculate_arbitrage(
+                            coin, buy_ex, sell_ex, prices[buy_ex], prices[sell_ex]
+                        )
+                        
+                        if opportunity["net_profit_percent"] > best_profit:
+                            best_profit = opportunity["net_profit_percent"]
+                            best_opportunity = opportunity
+        
+        return best_opportunity or {
+            "coin": coin,
+            "net_profit_percent": 0,
+            "is_profitable": False,
+            "message": "Не знайдено прибуткових можливостей"
+        }
+
+    async def calculate_arbitrage(self, coin: str, buy_exchange: str, 
+                                 sell_exchange: str, buy_price: float, 
+                                 sell_price: float, amount: float = 1.0) -> Dict:
+        """
+        Розрахунок арбітражу для конкретної пари бірж
+        """
+        # Комісії
+        buy_fee_percent = get_trading_fee(buy_exchange, self.fee_mode)
+        sell_fee_percent = get_trading_fee(sell_exchange, self.fee_mode)
+        
+        # Конвертація в десятковий дріб
+        buy_fee_decimal = buy_fee_percent / 100
+        sell_fee_decimal = sell_fee_percent / 100
+        
+        # Комісії на вивід
+        withdrawal_fee_buy = get_withdrawal_fee(coin, buy_exchange)
+        withdrawal_fee_sell = get_withdrawal_fee(coin, sell_exchange)
+        
+        # Розрахунок P&L
+        buy_cost = buy_price * amount * (1 + buy_fee_decimal)
+        sell_revenue = sell_price * amount * (1 - sell_fee_decimal)
+        
+        # Вивід
+        withdrawal_fee_usd = (withdrawal_fee_buy + withdrawal_fee_sell) * buy_price
+        
+        net_profit = sell_revenue - buy_cost - withdrawal_fee_usd
+        net_profit_percent = (net_profit / buy_cost) * 100 if buy_cost > 0 else 0
+        
+        # Оцінка ризиків
+        buy_liquidity = self.get_liquidity_score(buy_exchange, coin)
+        sell_liquidity = self.get_liquidity_score(sell_exchange, coin)
+        avg_liquidity = (buy_liquidity + sell_liquidity) / 2
+        
+        risk_level = self._calculate_risk_level(avg_liquidity, net_profit_percent)
+        min_profit_threshold = self._get_min_profit_threshold(risk_level)
+        is_profitable = net_profit_percent > min_profit_threshold
+        
+        return {
+            "coin": coin,
+            "buy_exchange": buy_exchange,
+            "sell_exchange": sell_exchange,
+            "buy_price": round(buy_price, 4),
+            "sell_price": round(sell_price, 4),
+            "price_difference_percent": round(((sell_price - buy_price) / buy_price) * 100, 4),
+            "net_profit_percent": round(net_profit_percent, 4),
+            "net_profit_usd": round(net_profit, 2),
+            "is_profitable": is_profitable,
+            "risk_level": risk_level,
+            "liquidity_score": round(avg_liquidity, 2),
+            "fee_mode": self.fee_mode,
+            "timestamp": datetime.utcnow().isoformat()
+        }
 
     def get_liquidity_score(self, exchange: str, coin: str) -> float:
-        """
-        Отримати оцінку ліквідності
-        """
-        # Тимчасово повертаємо фіксоване значення
-        # TODO: Замінити на реальні дані з API
+        """Отримати оцінку ліквідності"""
         return self.liquidity_scores.get(exchange, {}).get(coin, 0.5)
 
     def _calculate_risk_level(self, liquidity_score: float, profit_percent: float) -> str:
-        """
-        Розрахувати рівень ризику
-        """
-        if liquidity_score > 0.8 and profit_percent > 0.5:
+        """Розрахувати рівень ризику"""
+        if liquidity_score > 0.85 and profit_percent > 0.5:
             return "LOW"
-        elif liquidity_score > 0.6 and profit_percent > 0.3:
+        elif liquidity_score > 0.7 and profit_percent > 0.3:
             return "MEDIUM"
-        elif liquidity_score > 0.4 and profit_percent > 0.2:
+        elif liquidity_score > 0.5 and profit_percent > 0.2:
             return "MEDIUM_HIGH"
         else:
             return "HIGH"
 
     def _get_min_profit_threshold(self, risk_level: str) -> float:
-        """
-        Отримати мінімальний поріг прибутковості за рівнем ризику
-        """
+        """Мінімальний поріг прибутковості"""
         thresholds = {
-            "LOW": 0.1,        # 0.1% для низького ризику
-            "MEDIUM": 0.2,     # 0.2% для середнього ризику
-            "MEDIUM_HIGH": 0.3, # 0.3% для високого середнього ризику
-            "HIGH": 0.5        # 0.5% для високого ризику
+            "LOW": 0.1,
+            "MEDIUM": 0.2,
+            "MEDIUM_HIGH": 0.3,
+            "HIGH": 0.5
         }
         return thresholds.get(risk_level, 0.3)
 
+    def _filter_profitable_opportunities(self, opportunities: List[Dict]) -> List[Dict]:
+        """Фільтр прибуткових можливостей"""
+        return [opp for opp in opportunities if opp.get("is_profitable", False)]
+
     def _error_response(self, message: str) -> Dict:
-        """
-        Формування відповіді з помилкою
-        """
+        """Відповідь з помилкою"""
         return {
             "error": message,
             "success": False,
@@ -283,60 +332,54 @@ class ArbitrageCalculator:
 
     # ==================== УТИЛІТИ ====================
 
-    def set_fee_mode(self, mode: str):
+    def add_coin(self, coin: str, symbols: Dict[str, str]):
         """
-        Встановити режим комісій (maker/taker)
+        Додати нову монету
+        symbols: {"Binance": "BTCUSDT", "Kraken": "XXBTZUSD", ...}
         """
-        if mode in ["maker", "taker"]:
-            self.fee_mode = mode
-            print(f"Режим комісій змінено на: {mode}")
-            set_fee_mode(mode)  # Оновлюємо глобальний конфіг
-        else:
-            raise ValueError("Режим комісій повинен бути 'maker' або 'taker'")
-
-    def update_exchange_fee(self, exchange: str, maker_fee: float, taker_fee: float):
-        """
-        Оновити комісії біржі в конфігурації
-        """
-        update_fee(exchange, maker_fee, taker_fee)
-        print(f"Оновлено комісії для {exchange}: maker={maker_fee*100}%, taker={taker_fee*100}%")
-
-    def add_coin(self, coin: str, binance_symbol: str, kraken_symbol: str):
-        """
-        Додати нову монету для моніторингу
-        """
-        self.symbol_map[coin] = {
-            "binance": binance_symbol,
-            "kraken": kraken_symbol
-        }
+        self.symbol_map[coin] = symbols
         self.supported_coins.append(coin)
         
-        # Додаємо стандартні оцінки ліквідності
-        if "Binance" not in self.liquidity_scores:
-            self.liquidity_scores["Binance"] = {}
-        if "Kraken" not in self.liquidity_scores:
-            self.liquidity_scores["Kraken"] = {}
-            
-        self.liquidity_scores["Binance"][coin] = 0.7
-        self.liquidity_scores["Kraken"][coin] = 0.65
+        # Додати оцінки ліквідності
+        for exchange in self.supported_exchanges:
+            if exchange not in self.liquidity_scores:
+                self.liquidity_scores[exchange] = {}
+            self.liquidity_scores[exchange][coin] = 0.7
         
-        print(f"Додано монету {coin}: Binance={binance_symbol}, Kraken={kraken_symbol}")
+        print(f"Додано монету {coin}")
 
-    def get_supported_coins(self) -> List[str]:
-        """
-        Отримати список підтримуваних монет
-        """
-        return self.supported_coins.copy()
+    def add_exchange(self, name: str, client):
+        """Додати нову біржу"""
+        self.exchanges[name] = client
+        self.supported_exchanges.append(name)
+        print(f"Додано біржу {name}")
 
-    def get_exchange_info(self, exchange: str) -> Dict:
-        """
-        Отримати інформацію про біржу
-        """
+    def get_stats(self) -> Dict:
+        """Статистика системи"""
         return {
-            "fee_mode": self.fee_mode,
-            "trading_fee": get_trading_fee(exchange, self.fee_mode),
-            "supported_coins": [
-                coin for coin in self.supported_coins 
-                if coin in self.symbol_map
-            ]
+            "supported_coins": len(self.supported_coins),
+            "supported_exchanges": len(self.supported_exchanges),
+            "total_pairs": len(self.supported_coins) * len(self.supported_exchanges) * (len(self.supported_exchanges) - 1),
+            "coins": self.supported_coins,
+            "exchanges": self.supported_exchanges
         }
+
+# ==================== КЛІЄНТИ ДЛЯ НОВИХ БІРЖ ====================
+
+class CoinbaseClient:
+    """Клієнт для Coinbase API"""
+    async def get_price(self, symbol: str) -> Dict:
+        # TODO: Реалізувати реальний API
+        return {"price": 0.0, "exchange": "Coinbase"}
+
+class BybitClient:
+    """Клієнт для Bybit API"""
+    async def get_price(self, symbol: str) -> Dict:
+        # TODO: Реалізувати реальний API
+        return {"price": 0.0, "exchange": "Bybit"}
+
+class OKXClient:
+    """Клієнт для OKX API"""
+    async def get_price(self, symbol: str) -> Dict:
+        # TODO: Реалізувати реальний API
+        return {"price": 0.0, "exchange": "OKX"}
