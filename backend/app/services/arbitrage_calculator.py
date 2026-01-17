@@ -187,79 +187,79 @@ class ArbitrageCalculator:
 
     # ==================== ДОПОМІЖНІ МЕТОДИ ====================
 
-async def _fetch_all_prices(self, coin: str) -> Dict[str, float]:
-    """
-    Отримати ціни з усіх 5 бірж для однієї монети
-    """
-    prices = {}
+    async def _fetch_all_prices(self, coin: str) -> Dict[str, float]:
+        """
+        Отримати ціни з усіх 5 бірж для однієї монети
+        """
+        prices = {}
 
-    print(f"\n=== ПОЧАТОК ОТРИМАННЯ ЦІН ДЛЯ {coin} ===")
+        print(f"\n=== ПОЧАТОК ОТРИМАННЯ ЦІН ДЛЯ {coin} ===")
 
-    for exchange_name, client in self.exchanges.items():
-        try:
-            # 1. Отримуємо символ
-            symbol = self.symbol_map.get(coin, {}).get(exchange_name)
-            if not symbol:
-                print(f"❌ {exchange_name}: Немає символу для {coin}")
-                prices[exchange_name] = None
-                continue
-
-            print(f"🔍 {exchange_name}: Символ = {symbol}")
-
-            # 2. Викликаємо API
-            print(f"  → Виклик client.get_price('{symbol}')...")
-            price_data = await client.get_price(symbol)
-
-            # 3. Аналізуємо відповідь
-            if not price_data:
-                print(f"  ⚠️ {exchange_name}: price_data = None або пустий")
-                prices[exchange_name] = None
-                continue
-
-            print(f"  → Отримано: {price_data}")
-
-            # 4. Шукаємо ціну (різні формати)
-            price = None
-
-            # Спроба 1: безпосередньо з price_data["price"]
-            if "price" in price_data:
-                price = price_data["price"]
-                print(f"  ✅ Знайдено price: {price}")
-
-            # Спроба 2: з data["price"] (якщо структура вкладена)
-            elif "data" in price_data and isinstance(price_data["data"], dict):
-                if "price" in price_data["data"]:
-                    price = price_data["data"]["price"]
-                    print(f"  ✅ Знайдено data.price: {price}")
-
-            # Спроба 3: перше число в списку
-            elif "data" in price_data and isinstance(price_data["data"], list) and len(price_data["data"]) > 0:
-                first_item = price_data["data"][0]
-                if isinstance(first_item, dict) and "price" in first_item:
-                    price = first_item["price"]
-                    print(f"  ✅ Знайдено data[0].price: {price}")
-
-            # 5. Зберігаємо результат
-            if price is not None:
-                try:
-                    prices[exchange_name] = float(price)
-                    print(f"  💰 {exchange_name}: Ціна = {prices[exchange_name]}")
-                except (ValueError, TypeError) as e:
-                    print(f"  ❌ Помилка конвертації ціни: {e}, значення: {price}")
+        for exchange_name, client in self.exchanges.items():
+            try:
+                # 1. Отримуємо символ
+                symbol = self.symbol_map.get(coin, {}).get(exchange_name)
+                if not symbol:
+                    print(f"❌ {exchange_name}: Немає символу для {coin}")
                     prices[exchange_name] = None
-            else:
-                print(f"  ❌ Не знайдено поле 'price' в відповіді")
-                print(f"     Структура: {list(price_data.keys())}")
+                    continue
+
+                print(f"🔍 {exchange_name}: Символ = {symbol}")
+
+                # 2. Викликаємо API
+                print(f"  → Виклик client.get_price('{symbol}')...")
+                price_data = await client.get_price(symbol)
+
+                # 3. Аналізуємо відповідь
+                if not price_data:
+                    print(f"  ⚠️ {exchange_name}: price_data = None або пустий")
+                    prices[exchange_name] = None
+                    continue
+
+                print(f"  → Отримано: {price_data}")
+
+                # 4. Шукаємо ціну (різні формати)
+                price = None
+
+                # Спроба 1: безпосередньо з price_data["price"]
+                if "price" in price_data:
+                    price = price_data["price"]
+                    print(f"  ✅ Знайдено price: {price}")
+
+                # Спроба 2: з data["price"] (якщо структура вкладена)
+                elif "data" in price_data and isinstance(price_data["data"], dict):
+                    if "price" in price_data["data"]:
+                        price = price_data["data"]["price"]
+                        print(f"  ✅ Знайдено data.price: {price}")
+
+                # Спроба 3: перше число в списку
+                elif "data" in price_data and isinstance(price_data["data"], list) and len(price_data["data"]) > 0:
+                    first_item = price_data["data"][0]
+                    if isinstance(first_item, dict) and "price" in first_item:
+                        price = first_item["price"]
+                        print(f"  ✅ Знайдено data[0].price: {price}")
+
+                # 5. Зберігаємо результат
+                if price is not None:
+                    try:
+                        prices[exchange_name] = float(price)
+                        print(f"  💰 {exchange_name}: Ціна = {prices[exchange_name]}")
+                    except (ValueError, TypeError) as e:
+                        print(f"  ❌ Помилка конвертації ціни: {e}, значення: {price}")
+                        prices[exchange_name] = None
+                else:
+                    print(f"  ❌ Не знайдено поле 'price' в відповіді")
+                    print(f"     Структура: {list(price_data.keys())}")
+                    prices[exchange_name] = None
+
+            except Exception as e:
+                print(f"🔥 КРИТИЧНА ПОМИЛКА {exchange_name}: {type(e).__name__}: {e}")
+                import traceback
+                print(f"   Трейс: {traceback.format_exc()}")
                 prices[exchange_name] = None
 
-        except Exception as e:
-            print(f"🔥 КРИТИЧНА ПОМИЛКА {exchange_name}: {type(e).__name__}: {e}")
-            import traceback
-            print(f"   Трейс: {traceback.format_exc()}")
-            prices[exchange_name] = None
-
-    print(f"=== КІНЕЦЬ. Отримані ціни: {prices} ===")
-    return prices
+        print(f"=== КІНЕЦЬ. Отримані ціни: {prices} ===")
+        return prices
 
 
     async def _find_best_arbitrage(self, coin: str, prices: Dict[str, float]) -> Dict:
