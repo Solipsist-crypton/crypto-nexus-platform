@@ -1,14 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
-# Додаємо ці імпорти:
+
+# Імпортуємо моделі
 from .database import engine, Base
-# ІМПОРТУЄМО МОДЕЛІ
 from .models import arbitrage as arbitrage_models
+
+# Імпортуємо роутери - ТЕПЕР ТІЛЬКИ arbitrage_api
 from .api import arbitrage as arbitrage_api
 from .api import binance as binance_api
 from .api import kraken as kraken_api
-from .api import arbitrage_calc as arbitrage_calc_api
+# arbitrage_calc БІЛЬШЕ НЕ ІМПОРТУЄМО!
 from app.api.coinbase import router as coinbase_router
 from app.api.bybit import router as bybit_router
 from app.api.okx import router as okx_router
@@ -19,37 +21,34 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Створюємо таблиці в базі даних
-Base.metadata.create_all(bind=engine)
+app = FastAPI()
 
-app = FastAPI(
-    title="Crypto Nexus Platform API",
-    description="Комплексна платформа для арбітражу, ф'ючерсів та аірдропів",
-    version="1.0.0"
-)
-
+# CORS налаштування
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Реєструємо роутери
-app.include_router(arbitrage_api.router)
-app.include_router(binance_api.router)
-app.include_router(kraken_api.router)
-app.include_router(arbitrage_calc_api.router)
-app.include_router(coinbase_router)  # <- Має бути
-app.include_router(bybit_router)     # <- Має бути
-app.include_router(okx_router) 
+# Реєстрація роутерів - ТЕПЕР ТІЛЬКИ arbitrage_api
+app.include_router(arbitrage_api.router, prefix="/api/arbitrage", tags=["arbitrage"])
+app.include_router(binance_api.router, prefix="/api/binance", tags=["binance"])
+app.include_router(kraken_api.router, prefix="/api/kraken", tags=["kraken"])
+# arbitrage_calc_api.router БІЛЬШЕ НЕ ІСНУЄ - ми його видалили
+app.include_router(coinbase_router, prefix="/api/coinbase", tags=["coinbase"])
+app.include_router(bybit_router, prefix="/api/bybit", tags=["bybit"])
+app.include_router(okx_router, prefix="/api/okx", tags=["okx"])
+
+# Створюємо таблиці в базі даних
+Base.metadata.create_all(bind=engine)
 
 @app.get("/")
 async def root():
-    return {"message": "Crypto Nexus Platform API", "version": "1.0.0"}
+    return {"message": "Crypto Nexus Platform API"}
 
 @app.get("/health")
 async def health_check():
-    from datetime import datetime
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat() + "Z"}
+    from datetime import datetime, timezone
+    return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}

@@ -1,44 +1,33 @@
-import httpx
-import asyncio
-from typing import Optional, Dict
+from fastapi import APIRouter
+import aiohttp
+import logging
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter()
 
 class BinanceClient:
-    BASE_URL = "https://api.binance.com/api/v3"
-    
-    async def get_price(self, symbol: str = "BTCUSDT") -> Optional[Dict]:
-        """
-        Отримати поточну ціну з Binance
-        symbol: BTCUSDT, ETHUSDT, SOLUSDT тощо
-        """
+    async def get_price(self, symbol: str):
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(f"{self.BASE_URL}/ticker/price", params={"symbol": symbol})
-                response.raise_for_status()
-                data = response.json()
-                
-                return {
-                    "symbol": data["symbol"],
-                    "price": float(data["price"]),
-                    "exchange": "Binance",
-                    "timestamp": data.get("time", None)  # якщо є
-                }
+            url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url) as response:
+                    data = await response.json()
+                    return {
+                        'price': float(data['price']),
+                        'exchange': 'Binance',
+                        'symbol': symbol
+                    }
         except Exception as e:
-            print(f"❌ Помилка отримання ціни з Binance для {symbol}: {e}")
+            logger.error(f"Binance API error: {e}")
             return None
-    
-    async def get_prices(self, symbols: list = None) -> Dict[str, float]:
-        """
-        Отримати ціни для кількох пар одночасно
-        """
-        if symbols is None:
-            symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
-        
-        tasks = [self.get_price(symbol) for symbol in symbols]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        prices = {}
-        for symbol, result in zip(symbols, results):
-            if isinstance(result, dict) and "price" in result:
-                prices[symbol.replace("USDT", "")] = result["price"]
-        
-        return prices
+
+client = BinanceClient()
+
+@router.get("/price/{symbol}")
+async def get_price(symbol: str):
+    price_data = await client.get_price(symbol)
+    if price_data:
+        return {"success": True, "data": price_data, "message": f"Ціна {symbol} отримана"}
+    else:
+        return {"success": False, "data": None, "message": "Не вдалося отримати ціну"}

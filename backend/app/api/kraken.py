@@ -1,76 +1,78 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 import aiohttp
-import asyncio
-from typing import Dict, Optional, List
-from datetime import datetime
+import logging
+from typing import Dict, Optional
 
-# Власний клієнт всередині API модуля
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+
 class KrakenClient:
     def __init__(self):
-        self.base_url = "https://api.kraken.com"
-        self.session = None
-        
+        self.base_url = "https://api.kraken.com/0/public"
+
     async def get_price(self, symbol: str) -> Optional[Dict]:
         """Отримати ціну з Kraken"""
         try:
-            if not self.session:
-                self.session = aiohttp.ClientSession()
-                
-            url = f"{self.base_url}/0/public/Ticker"
-            params = {"pair": symbol}
-            
-            async with self.session.get(url, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if data.get("error") == []:
-                        result = data.get("result", {})
-                        if result:
-                            # Беремо перший ключ (напр. XXBTZUSD)
-                            first_key = list(result.keys())[0]
-                            ticker = result[first_key]
-                            price = float(ticker.get('c', [0])[0])
-                            
-                            return {
-                                "price": price,
-                                "exchange": "Kraken",
-                                "symbol": symbol,
-                                "timestamp": datetime.utcnow().isoformat()
-                            }
+            url = f"{self.base_url}/Ticker?pair={symbol}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=10) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if data.get('error'):
+                            logger.error(f"Kraken API error: {data['error']}")
+                            return None
+                        
+                        # Kraken повертає дані з ключем result, де ключ - це символ
+                        result = data.get('result', {})
+                        if not result:
+                            return None
+                        
+                        # Беремо перший символ з результату
+                        first_key = list(result.keys())[0]
+                        ticker_data = result[first_key]
+                        
+                        # Беремо ціну закриття (c[0])
+                        price = float(ticker_data.get('c', [0])[0])
+                        
+                        return {
+                            'price': price,
+                            'exchange': 'Kraken',
+                            'symbol': symbol,
+                            'bid': float(ticker_data.get('b', [0])[0]),
+                            'ask': float(ticker_data.get('a', [0])[0]),
+                            'volume': float(ticker_data.get('v', [0])[0]),
+                            'timestamp': data.get('timestamp', '')
+                        }
+                    return None
         except Exception as e:
-            print(f"Kraken error for {symbol}: {e}")
-        return None
-    
-    async def get_prices(self, symbols: List[str]) -> List[Optional[Dict]]:
-        """Отримати ціни для списку монет"""
-        tasks = [self.get_price(symbol) for symbol in symbols]
-        return await asyncio.gather(*tasks)
+            logger.error(f"Error fetching price from Kraken: {e}")
+            return None
 
-# FastAPI роутер
-router = APIRouter(prefix="/api/kraken", tags=["kraken"])
+
 client = KrakenClient()
 
-@router.get("/price/{symbol}")
-async def get_kraken_price(symbol: str = "XXBTZUSD"):
-    """Отримати ціну з Kraken"""
-    price_data = await client.get_price(symbol)
-    if price_data:
-        return {
-            "success": True,
-            "data": price_data,
-            "message": f"Ціна {symbol} з Kraken"
-        }
-    return {
-        "success": False,
-        "message": "Не вдалося отримати ціну"
-    }
 
-@router.get("/prices")
-async def get_kraken_prices():
-    """Отримати ціни для топ-3 монет"""
-    symbols = ["XXBTZUSD", "XETHZUSD", "SOLUSD"]
-    prices = await client.get_prices(symbols)
+@router.get("/health")
+async def health_check():
+    try:
+        price = await client.get_price("XXBTZUSD")
+        return {
+            "status": "healthy" if price else "unhealthy",
+            "exchange": "Kraken"
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@router.get("/price/{symbol}")
+async def get_price(symbol: str):
+    price_data = await client.get_price(symbol)
+    if not price_data:
+        raise HTTPException(status_code=404, detail=f"Price not found for {symbol}")
+    
     return {
         "success": True,
-        "data": prices,
-        "message": "Ціни з Kraken"
+        "data": price_data,
+        "message": f"Ціна {symbol} отримана з Kraken"
     }

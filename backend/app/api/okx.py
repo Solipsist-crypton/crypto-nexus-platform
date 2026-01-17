@@ -1,84 +1,71 @@
+from fastapi import APIRouter, HTTPException
 import aiohttp
+import logging
 from typing import Dict, Optional
-from datetime import datetime
 
-from fastapi import APIRouter
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
 
 class OKXClient:
-    """Клієнт для OKX API"""
-    
     def __init__(self):
-        self.base_url = "https://www.okx.com"
-        self.session = None
-        
+        self.base_url = "https://www.okx.com/api/v5"
+
     async def get_price(self, symbol: str) -> Optional[Dict]:
         """Отримати ціну з OKX"""
         try:
-            if not self.session:
-                self.session = aiohttp.ClientSession()
-                
-            url = f"{self.base_url}/api/v5/market/ticker"
-            params = {"instId": symbol}
-            
-            async with self.session.get(url, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    if data.get("code") == "0" and data.get("data"):
-                        tickers = data["data"]
-                        if len(tickers) > 0:
-                            ticker = tickers[0]
-                            return {
-                                "price": float(ticker.get("last", 0)),
-                                "exchange": "OKX",
-                                "symbol": symbol,
-                                "bid": float(ticker.get("bidPx", 0)),
-                                "ask": float(ticker.get("askPx", 0)),
-                                "volume": float(ticker.get("vol24h", 0)),
-                                "timestamp": datetime.utcnow().isoformat()
-                            }
+            url = f"{self.base_url}/market/ticker?instId={symbol}"
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=10) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        if data.get('code') != '0':
+                            logger.error(f"OKX API error: {data.get('msg')}")
+                            return None
+                        
+                        result = data.get('data', [])
+                        if not result:
+                            return None
+                        
+                        ticker = result[0]
+                        return {
+                            'price': float(ticker.get('last', 0)),
+                            'exchange': 'OKX',
+                            'symbol': symbol,
+                            'bid': float(ticker.get('bidPx', 0)),
+                            'ask': float(ticker.get('askPx', 0)),
+                            'volume': float(ticker.get('vol24h', 0)),
+                            'timestamp': ticker.get('ts', '')
+                        }
+                    return None
         except Exception as e:
-            print(f"OKX error for {symbol}: {e}")
-        return None
-    
-    async def get_prices(self, symbols: list) -> list:
-        """Отримати ціни для списку монет"""
-        import asyncio
-        tasks = [self.get_price(symbol) for symbol in symbols]
-        return await asyncio.gather(*tasks)
-# --- FastAPI Router для OKX ---
-router = APIRouter(prefix="/api/okx", tags=["okx"])
+            logger.error(f"Error fetching price from OKX: {e}")
+            return None
+
+
 client = OKXClient()
 
-@router.get("/price/{symbol}")
-async def get_okx_price(symbol: str):
-    """
-    Отримати ціну однієї монети з OKX.
-    Приклад символу: BTC-USDT, ETH-USDT, SOL-USDT
-    """
-    price_data = await client.get_price(symbol)
-    if price_data:
-        return {
-            "success": True,
-            "data": price_data,
-            "message": f"Ціна {symbol} з OKX"
-        }
-    return {
-        "success": False,
-        "message": f"Не вдалося отримати ціну {symbol} з OKX"
-    }
 
-@router.get("/prices")
-async def get_okx_prices(symbols: str = "BTC-USDT,ETH-USDT,SOL-USDT"):
-    """
-    Отримати ціни для списку монет з OKX.
-    Параметр (опційний): symbols - рядок, розділений комами.
-    """
-    symbol_list = [s.strip() for s in symbols.split(",")]
-    prices = await client.get_prices(symbol_list)
+@router.get("/health")
+async def health_check():
+    try:
+        price = await client.get_price("BTC-USDT")
+        return {
+            "status": "healthy" if price else "unhealthy",
+            "exchange": "OKX"
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+@router.get("/price/{symbol}")
+async def get_price(symbol: str):
+    price_data = await client.get_price(symbol)
+    if not price_data:
+        raise HTTPException(status_code=404, detail=f"Price not found for {symbol}")
     
     return {
         "success": True,
-        "data": prices,
-        "message": "Ціни з OKX",
-        "requested_symbols": symbol_list
+        "data": price_data,
+        "message": f"Ціна {symbol} отримана з OKX"
     }
