@@ -20,6 +20,7 @@ except ImportError:
         'Coinbase': {'maker': 0.4, 'taker': 0.6},
         'Bybit': {'maker': 0.1, 'taker': 0.1},
         'OKX': {'maker': 0.08, 'taker': 0.1}
+        #Нова біржа сюди!
     }
     logger = logging.getLogger(__name__)
     logger.warning("⚠️ FEES_CONFIG не знайдено, використовуються стандартні значення")
@@ -54,6 +55,7 @@ class ArbitrageCalculator:
             'DOGE': {'Binance': 'DOGEUSDT', 'Kraken': 'XDGUSD', 'Coinbase': 'DOGE-USD', 'Bybit': 'DOGEUSDT', 'OKX': 'DOGE-USDT'},
             'AVAX': {'Binance': 'AVAXUSDT', 'Kraken': 'AVAXUSD', 'Coinbase': 'AVAX-USD', 'Bybit': 'AVAXUSDT', 'OKX': 'AVAX-USDT'},
             'MATIC': {'Binance': 'MATICUSDT', 'Kraken': 'MATICUSD', 'Coinbase': 'MATIC-USD', 'Bybit': 'MATICUSDT', 'OKX': 'MATIC-USDT'}
+            # НОВА МОНЕТА - ДОДАЄМ ТУТ:
         }
 
     async def _get_price_from_exchange(self, exchange: str, symbol: str) -> Optional[float]:
