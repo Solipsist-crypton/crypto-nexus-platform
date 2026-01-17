@@ -2,12 +2,11 @@ import asyncio
 from typing import List, Dict, Optional, Tuple, Any
 from datetime import datetime
 
-# Імпортуємо клієнти для всіх бірж
 from app.api.binance import BinanceClient
 from app.api.kraken import KrakenClient
-from app.api.coinbase import CoinbaseClient
-from app.api.bybit import BybitClient
-from app.api.okx import OKXClient
+from app.api.coinbase import CoinbaseClient  # Перевір цей рядок
+from app.api.bybit import BybitClient        # Перевір цей рядок  
+from app.api.okx import OKXClient            # Перевір цей рядок
 
 from app.config.fees_config import get_trading_fee, get_withdrawal_fee, set_fee_mode, update_fee
 
@@ -364,22 +363,3 @@ class ArbitrageCalculator:
             "exchanges": self.supported_exchanges
         }
 
-# ==================== КЛІЄНТИ ДЛЯ НОВИХ БІРЖ ====================
-
-class CoinbaseClient:
-    """Клієнт для Coinbase API"""
-    async def get_price(self, symbol: str) -> Dict:
-        # TODO: Реалізувати реальний API
-        return {"price": 0.0, "exchange": "Coinbase"}
-
-class BybitClient:
-    """Клієнт для Bybit API"""
-    async def get_price(self, symbol: str) -> Dict:
-        # TODO: Реалізувати реальний API
-        return {"price": 0.0, "exchange": "Bybit"}
-
-class OKXClient:
-    """Клієнт для OKX API"""
-    async def get_price(self, symbol: str) -> Dict:
-        # TODO: Реалізувати реальний API
-        return {"price": 0.0, "exchange": "OKX"}
