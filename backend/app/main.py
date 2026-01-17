@@ -9,6 +9,9 @@ from .api import arbitrage as arbitrage_api
 from .api import binance as binance_api
 from .api import kraken as kraken_api
 from .api import arbitrage_calc as arbitrage_calc_api
+from app.api.coinbase import router as coinbase_router
+from app.api.bybit import router as bybit_router
+from app.api.okx import router as okx_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,6 +41,9 @@ app.include_router(arbitrage_api.router)
 app.include_router(binance_api.router)
 app.include_router(kraken_api.router)
 app.include_router(arbitrage_calc_api.router)
+app.include_router(coinbase_router)  # <- Має бути
+app.include_router(bybit_router)     # <- Має бути
+app.include_router(okx_router) 
 
 @app.get("/")
 async def root():

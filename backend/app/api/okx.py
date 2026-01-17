@@ -2,6 +2,8 @@ import aiohttp
 from typing import Dict, Optional
 from datetime import datetime
 
+from fastapi import APIRouter
+
 class OKXClient:
     """Клієнт для OKX API"""
     
@@ -43,3 +45,40 @@ class OKXClient:
         import asyncio
         tasks = [self.get_price(symbol) for symbol in symbols]
         return await asyncio.gather(*tasks)
+# --- FastAPI Router для OKX ---
+router = APIRouter(prefix="/api/okx", tags=["okx"])
+client = OKXClient()
+
+@router.get("/price/{symbol}")
+async def get_okx_price(symbol: str):
+    """
+    Отримати ціну однієї монети з OKX.
+    Приклад символу: BTC-USDT, ETH-USDT, SOL-USDT
+    """
+    price_data = await client.get_price(symbol)
+    if price_data:
+        return {
+            "success": True,
+            "data": price_data,
+            "message": f"Ціна {symbol} з OKX"
+        }
+    return {
+        "success": False,
+        "message": f"Не вдалося отримати ціну {symbol} з OKX"
+    }
+
+@router.get("/prices")
+async def get_okx_prices(symbols: str = "BTC-USDT,ETH-USDT,SOL-USDT"):
+    """
+    Отримати ціни для списку монет з OKX.
+    Параметр (опційний): symbols - рядок, розділений комами.
+    """
+    symbol_list = [s.strip() for s in symbols.split(",")]
+    prices = await client.get_prices(symbol_list)
+    
+    return {
+        "success": True,
+        "data": prices,
+        "message": "Ціни з OKX",
+        "requested_symbols": symbol_list
+    }

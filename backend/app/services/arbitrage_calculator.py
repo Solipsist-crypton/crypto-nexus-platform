@@ -3,11 +3,11 @@ from typing import List, Dict, Optional, Tuple, Any
 from datetime import datetime
 
 # Імпортуємо клієнти для всіх бірж
-from app.exchanges.binance_client import BinanceClient
-from app.exchanges.kraken_client import KrakenClient
-from app.exchanges.coinbase_client import CoinbaseClient
-from app.exchanges.bybit_client import BybitClient
-from app.exchanges.okx_client import OKXClient
+from app.api.binance import BinanceClient
+from app.api.kraken import KrakenClient
+from app.api.coinbase import CoinbaseClient
+from app.api.bybit import BybitClient
+from app.api.okx import OKXClient
 
 from app.config.fees_config import get_trading_fee, get_withdrawal_fee, set_fee_mode, update_fee
 

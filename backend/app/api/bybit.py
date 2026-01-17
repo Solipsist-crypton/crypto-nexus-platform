@@ -2,6 +2,8 @@ import aiohttp
 from typing import Dict, Optional
 from datetime import datetime
 
+from fastapi import APIRouter
+
 class BybitClient:
     """Клієнт для Bybit API"""
     
@@ -43,3 +45,41 @@ class BybitClient:
         import asyncio
         tasks = [self.get_price(symbol) for symbol in symbols]
         return await asyncio.gather(*tasks)
+
+# --- FastAPI Router для Bybit ---
+router = APIRouter(prefix="/api/bybit", tags=["bybit"])
+client = BybitClient()
+
+@router.get("/price/{symbol}")
+async def get_bybit_price(symbol: str):
+    """
+    Отримати ціну однієї монети з Bybit.
+    Приклад символу: BTCUSDT, ETHUSDT, SOLUSDT
+    """
+    price_data = await client.get_price(symbol)
+    if price_data:
+        return {
+            "success": True,
+            "data": price_data,
+            "message": f"Ціна {symbol} з Bybit"
+        }
+    return {
+        "success": False,
+        "message": f"Не вдалося отримати ціну {symbol} з Bybit"
+    }
+
+@router.get("/prices")
+async def get_bybit_prices(symbols: str = "BTCUSDT,ETHUSDT,SOLUSDT"):
+    """
+    Отримати ціни для списку монет з Bybit.
+    Параметр (опційний): symbols - рядок, розділений комами.
+    """
+    symbol_list = [s.strip() for s in symbols.split(",")]
+    prices = await client.get_prices(symbol_list)
+    
+    return {
+        "success": True,
+        "data": prices,
+        "message": "Ціни з Bybit",
+        "requested_symbols": symbol_list
+    }
