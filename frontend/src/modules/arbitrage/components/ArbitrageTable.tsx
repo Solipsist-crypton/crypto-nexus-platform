@@ -1,109 +1,83 @@
-import React from 'react'
-import { ExternalLink, ArrowUpRight, AlertCircle } from 'lucide-react'
+import React from 'react';
+import { ExternalLink, TrendingUp, TrendingDown } from 'lucide-react';
+import { ArbitrageOpportunity } from '../../../api/arbitrage';
 
-interface ArbitrageTableProps {
-  data: any[]
+interface Props {
+  data: ArbitrageOpportunity[];
 }
 
-const ArbitrageTable: React.FC<ArbitrageTableProps> = ({ data }) => {
+const ArbitrageTable: React.FC<Props> = ({ data }) => {
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
         <thead>
-          <tr className="border-b border-gray-200 dark:border-gray-800">
-            <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600 dark:text-gray-400">
-              Coin
-            </th>
-            <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600 dark:text-gray-400">
-              Buy/Sell
-            </th>
-            <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600 dark:text-gray-400">
-              Prices
-            </th>
-            <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600 dark:text-gray-400">
-              Profit
-            </th>
-            <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600 dark:text-gray-400">
-              Fees
-            </th>
-            <th className="py-3 px-4 text-left text-sm font-semibold text-gray-600 dark:text-gray-400">
-              Action
-            </th>
-          </tr>
+          <tr className="bg-gray-50">
+    <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700 rounded-l-lg">Coin</th>
+    <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">Exchanges</th>
+    <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">Price Difference</th>
+    <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700">Profit</th>
+    <th className="py-3 px-4 text-left text-sm font-semibold text-gray-700 rounded-r-lg">Action</th>
+  </tr>
         </thead>
         <tbody>
           {data.map((item) => (
-            <tr
-              key={item.id}
-              className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
-            >
+            <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
               <td className="py-4 px-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center text-white text-xs font-bold">
-                    {item.coin.substring(0, 2)}
+                <div className="flex items-center">
+                  <div className="w-10 h-10 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold">
+                    {item.coin.split('/')[0].substring(0, 3)}
                   </div>
-                  <div>
+                  <div className="ml-3">
                     <div className="font-medium">{item.coin}</div>
                     <div className="text-xs text-gray-500">
-                      {new Date(item.timestamp).toLocaleTimeString()}
+                      Vol: ${(item.volume / 1000000).toFixed(1)}M
                     </div>
                   </div>
                 </div>
               </td>
               <td className="py-4 px-4">
                 <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <ArrowUpRight size={14} className="text-green-500" />
-                    <span className="text-sm">Buy: {item.buyExchange}</span>
+                  <div className="flex items-center text-sm">
+                    <span className="text-green-600">BUY:</span>
+                    <span className="ml-2 font-medium">{item.buyExchange}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <ArrowUpRight size={14} className="text-red-500 rotate-180" />
-                    <span className="text-sm">Sell: {item.sellExchange}</span>
-                  </div>
-                </div>
-              </td>
-              <td className="py-4 px-4">
-                <div className="space-y-1">
-                  <div className="text-sm">
-                    Buy: ${item.buyPrice.toFixed(2)}
-                  </div>
-                  <div className="text-sm">
-                    Sell: ${item.sellPrice.toFixed(2)}
+                  <div className="flex items-center text-sm">
+                    <span className="text-red-600">SELL:</span>
+                    <span className="ml-2 font-medium">{item.sellExchange}</span>
                   </div>
                 </div>
               </td>
               <td className="py-4 px-4">
-                <div className="space-y-1">
-                  <div className={`font-semibold ${item.profit > 0 ? 'profit-positive' : 'profit-negative'}`}>
-                    ${item.profit.toFixed(2)}
-                  </div>
-                  <div className={`text-sm ${item.profitPercentage > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {item.profitPercentage > 0 ? '+' : ''}{item.profitPercentage.toFixed(2)}%
-                  </div>
+                <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                  item.profitPercentage > 0.5 
+                    ? 'bg-green-100 text-green-800' 
+                    : 'bg-blue-100 text-blue-800'
+                }`}>
+                  {item.profitPercentage > 0.5 ? (
+                    <TrendingUp className="w-4 h-4 mr-1" />
+                  ) : (
+                    <TrendingDown className="w-4 h-4 mr-1" />
+                  )}
+                  {item.profitPercentage.toFixed(2)}%
                 </div>
               </td>
               <td className="py-4 px-4">
-                <div className="text-sm">${item.fees.toFixed(2)}</div>
+                <div className="text-lg font-bold text-green-600">
+                  ${item.profit.toFixed(2)}
+                </div>
               </td>
               <td className="py-4 px-4">
-                <div className="flex gap-2">
-                  <button className="btn-primary text-sm px-3 py-1.5">
-                    Execute
-                  </button>
-                  <button className="p-1.5 border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
-                    <ExternalLink size={16} />
-                  </button>
-                  <button className="p-1.5 border rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
-                    <AlertCircle size={16} />
-                  </button>
-                </div>
+                <button className="btn-primary flex items-center gap-2 text-sm px-3 py-1.5">
+                  <ExternalLink className="w-4 h-4" />
+                  Execute
+                </button>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
-  )
-}
+  );
+};
 
-export default ArbitrageTable
+export default ArbitrageTable;

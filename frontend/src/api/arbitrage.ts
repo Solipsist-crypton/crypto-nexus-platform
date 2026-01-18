@@ -1,68 +1,82 @@
-import axios from 'axios'
+import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
-interface ArbitrageOpportunity {
-  id: string
-  coin: string
-  buyExchange: string
-  sellExchange: string
-  buyPrice: number
-  sellPrice: number
-  amount: number
-  profit: number
-  profitPercentage: number
-  fees: number
-  timestamp: string
-}
-
-interface CalculateRequest {
-  coin: string
-  buyExchange: string
-  sellExchange: string
-  amount: number
+export interface ArbitrageOpportunity {
+  id: string;
+  coin: string;
+  buyExchange: string;
+  sellExchange: string;
+  buyPrice: number;
+  sellPrice: number;
+  profit: number;
+  profitPercentage: number;
+  volume: number;
+  timestamp: string;
 }
 
 export const arbitrageApi = {
-  // Отримання всіх можливостей (з вашого бекенду)
   async getOpportunities(): Promise<ArbitrageOpportunity[]> {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/arbitrage/scan`)
-      return response.data
+      const response = await axios.get(`${API_URL}/api/arbitrage/scan`);
+      const apiData = response.data;
+      
+      if (apiData.success && apiData.data?.opportunities) {
+        // Використовуємо Set для унікальних можливостей
+        const uniqueOpportunities = new Map<string, ArbitrageOpportunity>();
+        
+        apiData.data.opportunities.forEach((coinData: any) => {
+          // Обробляємо ВСІ можливості з all_opportunities
+          if (coinData.all_opportunities && Array.isArray(coinData.all_opportunities)) {
+            coinData.all_opportunities.forEach((opp: any) => {
+              // Створюємо унікальний ключ
+              const uniqueKey = `${coinData.coin}-${opp.buy_exchange}-${opp.sell_exchange}`;
+              
+              if (!uniqueOpportunities.has(uniqueKey)) {
+                uniqueOpportunities.set(uniqueKey, {
+                  id: uniqueKey,
+                  coin: coinData.coin + '/USDT',
+                  buyExchange: opp.buy_exchange,
+                  sellExchange: opp.sell_exchange,
+                  buyPrice: opp.buy_price,
+                  sellPrice: opp.sell_price,
+                  // Більш точний розрахунок прибутку для 1000 одиниць
+                  profit: Number(((opp.sell_price - opp.buy_price) * 1000).toFixed(2)),
+                  profitPercentage: opp.net_profit_percent,
+                  volume: 1000000,
+                  timestamp: opp.timestamp,
+                });
+              }
+            });
+          }
+        });
+        
+        // Конвертуємо Map назад в масив
+        const opportunities = Array.from(uniqueOpportunities.values());
+        
+        console.log(`✅ Found ${opportunities.length} UNIQUE opportunities`);
+        return opportunities;
+      }
+      
+      return this.getMockData();
     } catch (error) {
-      console.error('Error fetching opportunities:', error)
-      // Повертаємо тестові дані для розробки
-      return this.getMockOpportunities()
+      console.error('API Error:', error);
+      return this.getMockData();
     }
   },
 
-  // Детальний розрахунок (з вашого бекенду)
-  async calculateOpportunity(data: CalculateRequest): Promise<any> {
-    try {
-      const { coin, buyExchange, sellExchange, amount } = data
-      const response = await axios.get(
-        `${API_BASE_URL}/api/arbitrage/calculate/${coin}/${buyExchange}/${sellExchange}/${amount}`
-      )
-      return response.data
-    } catch (error) {
-      console.error('Error calculating opportunity:', error)
-      throw error
-    }
-  },
 
-  // Отримання списку бірж
-  async getExchanges(): Promise<string[]> {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/api/exchanges`)
-      return response.data
-    } catch (error) {
-      console.error('Error fetching exchanges:', error)
-      return ['Binance', 'Kraken', 'Coinbase', 'KuCoin', 'OKX']
-    }
+  // Розрахувати конкретну можливість
+  async calculate(coin: string, buyExchange: string, sellExchange: string, amount: number) {
+    const response = await axios.get(
+      `${API_URL}/api/arbitrage/calculate/${coin}/${buyExchange}/${sellExchange}/${amount}`
+    );
+    return response.data;
   },
 
   // Тестові дані для розробки
-  getMockOpportunities(): ArbitrageOpportunity[] {
+  getMockData() {
+    console.log('⚠️ Using mock data - API not available');
     return [
       {
         id: '1',
@@ -71,10 +85,9 @@ export const arbitrageApi = {
         sellExchange: 'Kraken',
         buyPrice: 43210.50,
         sellPrice: 43300.25,
-        amount: 1.5,
         profit: 134.63,
-        profitPercentage: 0.21,
-        fees: 32.41,
+        profitPercentage: 0.31,
+        volume: 2500000,
         timestamp: new Date().toISOString(),
       },
       {
@@ -84,10 +97,9 @@ export const arbitrageApi = {
         sellExchange: 'Binance',
         buyPrice: 2540.30,
         sellPrice: 2560.80,
-        amount: 10,
         profit: 205.00,
         profitPercentage: 0.81,
-        fees: 38.10,
+        volume: 1200000,
         timestamp: new Date().toISOString(),
       },
       {
@@ -97,12 +109,11 @@ export const arbitrageApi = {
         sellExchange: 'OKX',
         buyPrice: 102.45,
         sellPrice: 103.20,
-        amount: 50,
         profit: 37.50,
         profitPercentage: 0.73,
-        fees: 7.65,
+        volume: 500000,
         timestamp: new Date().toISOString(),
       },
-    ]
-  },
-}
+    ];
+  }
+};
