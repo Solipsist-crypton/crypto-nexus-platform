@@ -11,35 +11,23 @@ export default defineConfig({
       '@modules': path.resolve(__dirname, './src/modules'),
       '@pages': path.resolve(__dirname, './src/pages'),
       '@api': path.resolve(__dirname, './src/api'),
-      '@utils': path.resolve(__dirname, './src/utils'),
-      '@types': path.resolve(__dirname, './src/types'),
-    },
+      '@utils': path.resolve(__dirname, './src/utils')
+    }
   },
   server: {
     port: 3000,
+    host: true,
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path.replace(/^\/api/, ''),
-      },
-      '/ws': {
-        target: 'ws://localhost:5000',
-        ws: true,
-      },
-    },
+        rewrite: (path) => path.replace(/^\/api/, '/api')
+      }
+    }
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          charts: ['recharts', 'chart.js', 'react-chartjs-2'],
-        },
-      },
-    },
-  },
+    sourcemap: true
+  }
 })
