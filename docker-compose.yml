@@ -1,41 +1,55 @@
+version: '3.8'
+
 services:
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_USER: crypto_user
-      POSTGRES_PASSWORD: crypto_pass
-      POSTGRES_DB: crypto_nexus
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+  backend:
+    build: ./backend
     ports:
-      - "5432:5432"
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - crypto-network
+
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_BASE_URL=http://backend:5000
+    depends_on:
+      - backend
+    networks:
+      - crypto-network
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    networks:
+      - crypto-network
 
-  backend:
-    build: 
-      context: ./backend
-      dockerfile: Dockerfile
-    ports:
-      - "5000:5000"  # Змінив з 8000 на 5000
+  postgres:
+    image: postgres:15-alpine
     environment:
-      DATABASE_URL: postgresql://crypto_user:crypto_pass@postgres:5432/crypto_nexus
-      REDIS_URL: redis://redis:6379/0
-    depends_on:
-      - postgres
-      - redis
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      POSTGRES_DB: crypto_nexus
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: securepassword
     ports:
-      - "3000:3000"
-    depends_on:
-      - backend
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - crypto-network
+
+networks:
+  crypto-network:
+    driver: bridge
 
 volumes:
   postgres_data:

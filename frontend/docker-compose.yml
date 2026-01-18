@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: crypto-nexus-frontend
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://backend:5000
+      - VITE_WS_URL=ws://backend:5000/ws
+    depends_on:
+      - backend
+    networks:
+      - crypto-network
+    restart: unless-stopped
+
+networks:
+  crypto-network:
+    external: true
