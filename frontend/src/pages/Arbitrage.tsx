@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { RefreshCw, Filter, Download } from 'lucide-react'
-import { arbitrageApi } from '@/api/arbitrage'
-import ArbitrageTable from '@/modules/arbitrage/components/ArbitrageTable'
-import ArbitrageCalculator from '@/modules/arbitrage/components/Calculator'
-import RealTimeChart from '@/modules/arbitrage/components/RealTimeChart'
-import Loader from '@/components/common/Loader'
+import { arbitrageApi } from '../api/arbitrage'
+import ArbitrageTable from '../modules/arbitrage/components/ArbitrageTable'
+import ArbitrageCalculator from '../modules/arbitrage/components/Calculator'
+import RealTimeChart from '../modules/arbitrage/components/RealTimeChart'
+import Loader from '../modules/arbitrage/components/common/Loader'
 
 const Arbitrage: React.FC = () => {
   const [opportunities, setOpportunities] = useState<any[]>([])
