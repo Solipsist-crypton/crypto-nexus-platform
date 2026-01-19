@@ -6,8 +6,8 @@ services:
     environment:
       NODE_ENV: production
       REDIS_URL: redis://redis:6379
-      TELEGRAM_BOT_TOKEN: "8140490275:AAEMm_xITouh2fcqLOON9E8KMQUW_SpH6xQ"
-      TELEGRAM_CHAT_ID: "960542590"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
     depends_on:
       - redis
       - postgres
