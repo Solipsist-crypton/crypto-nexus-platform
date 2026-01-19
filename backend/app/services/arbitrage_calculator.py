@@ -221,7 +221,7 @@ class ArbitrageCalculator:
             logger.info(f"✅ {coin}: Найкраща можливість {best_opportunity['buy_exchange']} → "
                        f"{best_opportunity['sell_exchange']} | "
                        f"Прибуток: {best_opportunity['net_profit_percent']:.2f}%")
-            
+
             return {
                 'coin': coin,
                 'prices': valid_prices,
@@ -229,7 +229,8 @@ class ArbitrageCalculator:
                 'all_opportunities': all_opportunities,
                 'timestamp': datetime.now(timezone.utc).isoformat()
             }
-            
+
+    
         except Exception as e:
             logger.error(f"❌ Помилка при розрахунку арбітражу для {coin}: {e}")
             # Навіть при помилці повертаємо структуру
