@@ -51,8 +51,8 @@ services:
     build: ./backend
     command: python telegram_worker.py
     environment:
-      TELEGRAM_BOT_TOKEN: "8140490275:AAEMm_xITouh2fcqLOON9E8KMQUW_SpH6xQ"
-      TELEGRAM_CHAT_ID: "960542590"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
       BACKEND_URL: "http://backend:5000"
       CHECK_INTERVAL: "60"
       PROFIT_THRESHOLD: "0.1"
