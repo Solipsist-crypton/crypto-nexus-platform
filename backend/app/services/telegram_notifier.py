@@ -8,17 +8,10 @@ logger = logging.getLogger(__name__)
 
 class TelegramNotifier:
     def __init__(self):
-        # Варіант 1: Прямо в коді (тимчасово)
-        self.token = "8140490275:AAEMm_xITouh2fcqLOON9E8KMQUW_SpH6xQ"
-        self.chat_id = "960542590"
         
-        # Варіант 2: Через змінні середовища (кращий)
-        # self.token = os.getenv('TELEGRAM_BOT_TOKEN', '')
-        # self.chat_id = os.getenv('TELEGRAM_CHAT_ID', '')
-        
-        # Варіант 3: З Docker Compose (якщо є)
-        # self.token = os.getenv('TELEGRAM_BOT_TOKEN', '8140490275:AAEMm_xITouh2fcqLOON9E8KMQUW_SpH6xQ')
-        # self.chat_id = os.getenv('TELEGRAM_CHAT_ID', '960542590')
+        self.token = os.getenv('TELEGRAM_BOT_TOKEN', '')
+        self.chat_id = os.getenv('TELEGRAM_CHAT_ID', '')
+
         
         # Перевірка
         if not self.token or not self.chat_id:
