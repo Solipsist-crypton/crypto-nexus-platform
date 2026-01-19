@@ -90,30 +90,6 @@ export const arbitrageApi = {
         volume: 2500000,
         timestamp: new Date().toISOString(),
       },
-      {
-        id: '2',
-        coin: 'ETH/USDT',
-        buyExchange: 'Coinbase',
-        sellExchange: 'Binance',
-        buyPrice: 2540.30,
-        sellPrice: 2560.80,
-        profit: 205.00,
-        profitPercentage: 0.81,
-        volume: 1200000,
-        timestamp: new Date().toISOString(),
-      },
-      {
-        id: '3',
-        coin: 'SOL/USDT',
-        buyExchange: 'KuCoin',
-        sellExchange: 'OKX',
-        buyPrice: 102.45,
-        sellPrice: 103.20,
-        profit: 37.50,
-        profitPercentage: 0.73,
-        volume: 500000,
-        timestamp: new Date().toISOString(),
-      },
     ];
   }
 };
