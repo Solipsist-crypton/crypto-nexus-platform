@@ -54,3 +54,11 @@ async def root():
 async def health_check():
     from datetime import datetime, timezone
     return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+try:
+    from backend.app.futures.api.router import router as futures_router
+    app.include_router(futures_router, prefix="/api/futures", tags=["futures"])
+    print("✅ Futures module loaded successfully")
+except Exception as e:
+    print(f"⚠️  Futures module error: {e}")
+    print("⚠️  Continuing without futures module...")
