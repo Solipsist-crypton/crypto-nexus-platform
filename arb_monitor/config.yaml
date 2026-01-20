@@ -1,0 +1,21 @@
+main_backend:
+  base_url: "http://localhost:5000"
+  endpoints:
+    arbitrage_compare: "/api/arbitrage/compare/{coin}"
+
+# Монети для моніторингу
+monitor_coins:
+  - "BTC"
+  - "ETH" 
+  - "SOL"
+  - "ADA"
+  - "DOT"
+  - "AVAX"
+  - "MATIC"
+  - "BNB"
+
+# Налаштування
+update_interval: 15  # секунд
+request_timeout: 5   # секунд
+max_workers: 3       # паралельних запитів
+min_spread_to_show: 0.1  # мінімальний спред для відображення

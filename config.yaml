@@ -1,0 +1,18 @@
+exchanges:
+- Binance
+- CoinGecko
+- Kraken
+main_backend:
+  base_url: http://localhost:8000
+  endpoints:
+    arbitrage_compare: /api/arbitrage/compare/{coin}
+    arbitrage_scan: /api/arbitrage/scan
+monitor_coins:
+- BTC
+- ETH
+- SOL
+- ADA
+- DOT
+- AVAX
+- MATIC
+update_interval: 300
