@@ -1,14 +1,15 @@
 """
-ОКРЕМИЙ скрипт для створення таблиць ф'ючерсів.
-Не чіпає основну БД, поки ми явно не викликаємо цей скрипт.
+Скрипт для створення таблиць ф'ючерсів.
+Запустити: python -m app.futures.init_db
 """
+
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from sqlalchemy import create_engine
-from backend.app.futures.models.base import FuturesBase
-from backend.app.futures.models.signal import Signal
+from backend.app.database import Base
+from backend.app.futures.models import Signal
 
 def init_futures_tables():
     """Створює таблиці для ф'ючерсів"""
@@ -23,14 +24,18 @@ def init_futures_tables():
     try:
         engine = create_engine(database_url)
         
-        # Створюємо ТІЛЬКИ таблиці ф'ючерсів
-        FuturesBase.metadata.create_all(bind=engine)
+        # Створюємо таблиці
+        Base.metadata.create_all(bind=engine, tables=[Signal.__table__])
         
-        print("✅ Таблиці ф'ючерсів створено успішно!")
-        print("📊 Створені таблиці:", list(FuturesBase.metadata.tables.keys()))
+        print("✅ Таблиця futures_signals створена успішно!")
+        print("📊 Колонки:")
+        for column in Signal.__table__.columns:
+            print(f"  - {column.name}: {column.type}")
         
     except Exception as e:
         print(f"❌ Помилка: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     init_futures_tables()
