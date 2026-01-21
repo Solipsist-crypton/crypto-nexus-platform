@@ -5,6 +5,7 @@ from app.database import Base
 class Signal(Base):
     """Модель для AI-сигналів ф'ючерсів"""
     __tablename__ = "futures_signals"
+    __table_args__ = {'extend_existing': True}  # ⬅️ ДОДАЙ ЦЕЙ РЯДОК!
     
     id = Column(Integer, primary_key=True, index=True)
     

@@ -1,17 +1,15 @@
-from fastapi import APIRouter
-from datetime import datetime
 
-from sqlalchemy import func
-from app.futures.services.explanation_builder import explanation_builder
+from fastapi import APIRouter, HTTPException, Depends
+from datetime import datetime
+import random
 from typing import List, Optional
-from fastapi import HTTPException, Depends
 from sqlalchemy.orm import Session
+# ВІДНОСНІ ІМПОРТИ (правильні для структури)
 from app.database import get_db
 from app.futures.models import Signal, VirtualTrade
-import random
-
-
-router = APIRouter(tags=["futures"])  # БЕЗ prefix тут
+from app.futures.services.explanation_builder import explanation_builder
+from app.futures.services.ai_analyzer import AIAnalyzer
+router = APIRouter(tags=["futures"])
 
 @router.get("/health")
 def health_check():
@@ -34,44 +32,99 @@ def test_endpoint():
             "timestamp": datetime.now().isoformat()
         }
     }
+
 @router.post("/signals/generate")
-def generate_signal():
-    """Згенерувати тестовий AI-сигнал з поясненням"""
-    # Симулюємо AI-фактори
-    factors = {
-        "trend_strength": round(random.uniform(0.5, 0.9), 2),
-        "volume_confirmation": round(random.uniform(0.4, 0.8), 2),
-        "support_resistance": round(random.uniform(0.6, 0.95), 2),
-        "volatility": round(random.uniform(0.3, 0.7), 2),
-        "momentum": round(random.uniform(0.5, 0.85), 2),
-        "market_sentiment": round(random.uniform(0.4, 0.8), 2)
-    }
+def generate_signal(
+    symbol: str = "BTCUSDT",
+    timeframe: str = "1h",
+    db: Session = Depends(get_db)
+):
+    """Згенерувати реальний AI-сигнал на основі ринкового аналізу"""
     
-    confidence = round(random.uniform(0.6, 0.95), 2)
-    direction = random.choice(["long", "short"])
+    # Використовуємо реальний AI аналізатор
+    analyzer = AIAnalyzer()
+    analysis = analyzer.analyze_market(symbol, timeframe)
     
-    # Генеруємо пояснення
+    # Генеруємо пояснення на основі реального аналізу
     explanation = explanation_builder.build_explanation(
-        symbol="BTCUSDT",
-        direction=direction,
-        confidence=confidence,
-        factors=factors
+        symbol=symbol,
+        direction=analysis["direction"],
+        confidence=analysis["confidence"],
+        factors=analysis["factors"]
     )
+    
+    # Зберігаємо в БД
+    db_signal = Signal(
+        symbol=symbol,
+        direction=analysis["direction"],
+        confidence=analysis["confidence"],
+        reasoning_weights=analysis["factors"],
+        explanation_text=explanation,
+        entry_price=analysis["entry_price"],
+        take_profit=analysis["take_profit"],
+        stop_loss=analysis["stop_loss"],
+        timeframe=timeframe,
+        is_active=True,
+        source="ai_analyzer_v1"
+    )
+    
+    db.add(db_signal)
+    db.commit()
+    db.refresh(db_signal)
     
     return {
         "status": "success",
         "signal": {
-            "symbol": "BTCUSDT",
-            "direction": direction,
-            "confidence": confidence,
+            "id": db_signal.id,
+            "symbol": symbol,
+            "direction": analysis["direction"],
+            "confidence": analysis["confidence"],
             "explanation": explanation,
-            "factors": factors,
-            "entry_price": round(42000 + random.uniform(-1000, 1000), 2),
-            "take_profit": round(44000 + random.uniform(-2000, 2000), 2),
-            "stop_loss": round(41000 + random.uniform(-2000, 2000), 2),
+            "factors": analysis["factors"],
+            "entry_price": analysis["entry_price"],
+            "take_profit": analysis["take_profit"],
+            "stop_loss": analysis["stop_loss"],
+            "timeframe": timeframe,
             "timestamp": datetime.now().isoformat()
         },
-        "module": "futures_v1"
+        "analysis_type": "market_based",
+        "message": "Signal generated based on market analysis"
+    }
+
+@router.get("/signals")
+def get_signals(
+    db: Session = Depends(get_db),
+    limit: int = 10,
+    active_only: bool = True
+):
+    """Отримати список сигналів з БД"""
+    query = db.query(Signal)
+    
+    if active_only:
+        query = query.filter(Signal.is_active == True)
+    
+    signals = query.order_by(Signal.created_at.desc()).limit(limit).all()
+    
+    return {
+        "status": "success",
+        "count": len(signals),
+        "signals": [signal.to_dict() for signal in signals]
+    }
+
+@router.get("/signals/{signal_id}")
+def get_signal(
+    signal_id: int,
+    db: Session = Depends(get_db)
+):
+    """Отримати деталі конкретного сигналу"""
+    signal = db.query(Signal).filter(Signal.id == signal_id).first()
+    
+    if not signal:
+        raise HTTPException(status_code=404, detail="Signal not found")
+    
+    return {
+        "status": "success",
+        "signal": signal.to_dict()
     }
 
 @router.get("/explain")
@@ -94,6 +147,9 @@ def explain_signal(
         "explanation": explanation,
         "timestamp": datetime.now().isoformat()
     }
+
+# ВІРТУАЛЬНІ УГОДИ API
+
 @router.post("/virtual-trades", response_model=dict)
 def create_virtual_trade(
     signal_id: int,
@@ -123,7 +179,9 @@ def create_virtual_trade(
         take_profit=take_profit,
         stop_loss=stop_loss,
         current_price=entry_price,  # Початкова ціна = ціна входу
-        status="active"
+        status="active",
+        pnl_percentage=0.0,
+        pnl_amount=0.0
     )
     
     db.add(virtual_trade)
@@ -191,11 +249,13 @@ def update_trade_price(
     old_status = trade.status
     trade.calculate_pnl(current_price)
     
-    # Якщо статус змінився (досягнуто TP/SL), встановлюємо closed_at
+    # Якщо статус змінився (досягнуто TP/SL), оновлюємо
     if trade.status != old_status and trade.status in ["tp_hit", "sl_hit"]:
+        from sqlalchemy.sql import func
         trade.closed_at = func.now()
     
     db.commit()
+    db.refresh(trade)
     
     return {
         "status": "success",
@@ -226,4 +286,26 @@ def delete_virtual_trade(
     return {
         "status": "success",
         "message": "Virtual trade deleted"
+    }
+
+@router.get("/signals/{signal_id}/virtual-trades")
+def get_signal_virtual_trades(
+    signal_id: int,
+    db: Session = Depends(get_db)
+):
+    """Отримати всі віртуальні угоди для конкретного сигналу"""
+    signal = db.query(Signal).filter(Signal.id == signal_id).first()
+    
+    if not signal:
+        raise HTTPException(status_code=404, detail="Signal not found")
+    
+    trades = db.query(VirtualTrade).filter(
+        VirtualTrade.signal_id == signal_id
+    ).order_by(VirtualTrade.created_at.desc()).all()
+    
+    return {
+        "status": "success",
+        "signal": signal.to_dict(),
+        "count": len(trades),
+        "trades": [trade.to_dict() for trade in trades]
     }
