@@ -8,7 +8,7 @@ class VirtualTrade(Base):
     __tablename__ = "virtual_trades"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Якщо буде авторизація
+    user_id = Column(Integer, nullable=True)  # Просто поле без FK
     signal_id = Column(Integer, ForeignKey("futures_signals.id"))
     
     # Цінові рівні

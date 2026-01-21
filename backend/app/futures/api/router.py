@@ -6,8 +6,8 @@ from app.futures.services.explanation_builder import explanation_builder
 from typing import List, Optional
 from fastapi import HTTPException, Depends
 from sqlalchemy.orm import Session
-from backend.app.database import get_db
-from backend.app.futures.models import Signal, VirtualTrade
+from app.database import get_db
+from app.futures.models import Signal, VirtualTrade
 import random
 
 
