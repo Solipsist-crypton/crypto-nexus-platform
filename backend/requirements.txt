@@ -13,3 +13,10 @@ python-multipart==0.0.6
 httpx==0.26.0
 python-telegram-bot>=20.0
 requests>=2.31.0
+ccxt>=4.0.0
+pandas>=1.5.0
+numpy>=1.24.0
+TA-Lib>=0.4.28
+websockets>=11.0.0
+asyncio>=3.4.3
+scikit-learn>=1.3.0  # Для ML моделей
