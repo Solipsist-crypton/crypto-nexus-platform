@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, JSON, DateTime, Boolean, Text
 from sqlalchemy.sql import func
-from backend.app.database import Base
+from app.database import Base
 
 class Signal(Base):
     """Модель для AI-сигналів ф'ючерсів"""
