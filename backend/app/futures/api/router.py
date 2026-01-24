@@ -1,15 +1,25 @@
-
 from fastapi import APIRouter, HTTPException, Depends
 from datetime import datetime
 import random
 from typing import List, Optional
 from sqlalchemy.orm import Session
+
 # ВІДНОСНІ ІМПОРТИ (правильні для структури)
 from app.database import get_db
 from app.futures.models import Signal, VirtualTrade
-from app.futures.services.explanation_builder import explanation_builder
+from app.futures.services.explanation_builder import ExplanationBuilder
 from app.futures.services.ai_analyzer import AIAnalyzer
+from app.futures.models.exchange_connector import ExchangeConnector
+from app.futures.services.signal_orchestrator import SignalOrchestrator
+
 router = APIRouter(tags=["futures"])
+
+# Створюємо екземпляри сервісів
+explanation_builder = ExplanationBuilder()
+ai_analyzer = AIAnalyzer()
+exchange_connector = ExchangeConnector()
+signal_orchestrator = SignalOrchestrator()
+
 
 @router.get("/health")
 def health_check():
@@ -20,6 +30,7 @@ def health_check():
         "version": "0.0.1",
         "timestamp": datetime.now().isoformat()
     }
+
 
 @router.get("/test")
 def test_endpoint():
@@ -33,39 +44,41 @@ def test_endpoint():
         }
     }
 
+
 @router.post("/signals/generate")
 def generate_signal(
-    symbol: str = "BTCUSDT",
+    symbol: str = "BTC/USDT:USDT",
     timeframe: str = "1h",
     db: Session = Depends(get_db)
 ):
     """Згенерувати реальний AI-сигнал на основі ринкового аналізу"""
     
-    # Використовуємо реальний AI аналізатор
-    analyzer = AIAnalyzer()
-    analysis = analyzer.analyze_market(symbol, timeframe)
+    # Використовуємо оркестратор для повного пайплайну
+    analysis = signal_orchestrator.generate_signal(symbol, timeframe)
+    
+    if "error" in analysis:
+        raise HTTPException(status_code=400, detail=analysis["error"])
+    
+    # Додаємо symbol до analysis для пояснення
+    analysis['symbol'] = symbol
+    analysis['timeframe'] = timeframe
     
     # Генеруємо пояснення на основі реального аналізу
-    explanation = explanation_builder.build_explanation(
-        symbol=symbol,
-        direction=analysis["direction"],
-        confidence=analysis["confidence"],
-        factors=analysis["factors"]
-    )
+    explanation = explanation_builder.build_explanation(analysis)
     
     # Зберігаємо в БД
     db_signal = Signal(
         symbol=symbol,
         direction=analysis["direction"],
         confidence=analysis["confidence"],
-        reasoning_weights=analysis["factors"],
+        reasoning_weights=analysis.get("factors", {}),
         explanation_text=explanation,
         entry_price=analysis["entry_price"],
         take_profit=analysis["take_profit"],
         stop_loss=analysis["stop_loss"],
         timeframe=timeframe,
         is_active=True,
-        source="ai_analyzer_v1"
+        source="ai_analyzer_v2"
     )
     
     db.add(db_signal)
@@ -80,7 +93,7 @@ def generate_signal(
             "direction": analysis["direction"],
             "confidence": analysis["confidence"],
             "explanation": explanation,
-            "factors": analysis["factors"],
+            "factors": analysis.get("factors", {}),
             "entry_price": analysis["entry_price"],
             "take_profit": analysis["take_profit"],
             "stop_loss": analysis["stop_loss"],
@@ -90,6 +103,57 @@ def generate_signal(
         "analysis_type": "market_based",
         "message": "Signal generated based on market analysis"
     }
+
+
+@router.post("/signals/generate-multiple")
+def generate_multiple_signals(
+    symbols: List[str] = ["BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT"],
+    timeframe: str = "1h",
+    db: Session = Depends(get_db)
+):
+    """Згенерувати сигнали для кількох пар одночасно"""
+    signals = signal_orchestrator.generate_multiple_signals(symbols)
+    
+    saved_signals = []
+    for analysis in signals:
+        if "error" not in analysis:
+            analysis['symbol'] = analysis.get('symbol', '')
+            analysis['timeframe'] = timeframe
+            
+            explanation = explanation_builder.build_explanation(analysis)
+            
+            db_signal = Signal(
+                symbol=analysis["symbol"],
+                direction=analysis["direction"],
+                confidence=analysis["confidence"],
+                reasoning_weights=analysis.get("factors", {}),
+                explanation_text=explanation,
+                entry_price=analysis["entry_price"],
+                take_profit=analysis["take_profit"],
+                stop_loss=analysis["stop_loss"],
+                timeframe=timeframe,
+                is_active=True,
+                source="ai_analyzer_batch"
+            )
+            
+            db.add(db_signal)
+            saved_signals.append({
+                "id": db_signal.id,
+                "symbol": analysis["symbol"],
+                "direction": analysis["direction"],
+                "confidence": analysis["confidence"],
+                "explanation": explanation
+            })
+    
+    db.commit()
+    
+    return {
+        "status": "success",
+        "count": len(saved_signals),
+        "signals": saved_signals,
+        "timestamp": datetime.now().isoformat()
+    }
+
 
 @router.get("/signals")
 def get_signals(
@@ -111,6 +175,7 @@ def get_signals(
         "signals": [signal.to_dict() for signal in signals]
     }
 
+
 @router.get("/signals/{signal_id}")
 def get_signal(
     signal_id: int,
@@ -127,26 +192,75 @@ def get_signal(
         "signal": signal.to_dict()
     }
 
+
 @router.get("/explain")
 def explain_signal(
-    symbol: str = "BTCUSDT",
+    symbol: str = "BTC/USDT:USDT",
     direction: str = "long",
-    confidence: float = 0.75
+    confidence: float = 0.75,
+    entry_price: Optional[float] = None,
+    timeframe: str = "1h"
 ):
     """Отримати текстове пояснення для сигналу"""
-    explanation = explanation_builder.build_explanation(
-        symbol=symbol,
-        direction=direction,
-        confidence=confidence
-    )
+    # Якщо не вказана ціна, отримуємо поточну з біржі
+    if entry_price is None:
+        try:
+            ticker = exchange_connector.fetch_ticker(symbol)
+            entry_price = ticker['last'] if ticker else 10000
+        except:
+            entry_price = 10000
+    
+    # Створюємо мок-об'єкт сигналу
+    mock_signal = {
+        'symbol': symbol,
+        'direction': direction,
+        'confidence': confidence,
+        'entry_price': entry_price,
+        'take_profit': entry_price * (1.03 if direction == "long" else 0.97),
+        'stop_loss': entry_price * (0.98 if direction == "long" else 1.02),
+        'timeframe': timeframe,
+        'factors': {
+            "trend_strength": confidence,
+            "volume_confirmation": 0.7,
+            "support_resistance": 0.6,
+            "volatility": 0.5,
+            "momentum": confidence * 0.9
+        }
+    }
+    
+    explanation = explanation_builder.build_explanation(mock_signal)
     
     return {
         "symbol": symbol,
         "direction": direction,
         "confidence": confidence,
+        "entry_price": entry_price,
         "explanation": explanation,
         "timestamp": datetime.now().isoformat()
     }
+
+
+@router.get("/market-data/{symbol}")
+def get_market_data(
+    symbol: str = "BTC/USDT:USDT",
+    timeframe: str = "1h",
+    limit: int = 100
+):
+    """Отримати ринкові дані для символу"""
+    try:
+        df = exchange_connector.fetch_ohlcv(symbol, timeframe, limit)
+        
+        return {
+            "status": "success",
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "data_count": len(df),
+            "latest_price": float(df['close'].iloc[-1]) if len(df) > 0 else 0,
+            "samples": df[['timestamp', 'close']].tail(5).to_dict('records') if len(df) > 0 else []
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch market data: {str(e)}")
+
 
 # ВІРТУАЛЬНІ УГОДИ API
 
@@ -194,6 +308,7 @@ def create_virtual_trade(
         "trade": virtual_trade.to_dict()
     }
 
+
 @router.get("/virtual-trades", response_model=dict)
 def get_virtual_trades(
     status: Optional[str] = None,
@@ -214,6 +329,7 @@ def get_virtual_trades(
         "trades": [trade.to_dict() for trade in trades]
     }
 
+
 @router.get("/virtual-trades/{trade_id}", response_model=dict)
 def get_virtual_trade(
     trade_id: int,
@@ -229,6 +345,7 @@ def get_virtual_trade(
         "status": "success",
         "trade": trade.to_dict()
     }
+
 
 @router.post("/virtual-trades/{trade_id}/update-price", response_model=dict)
 def update_trade_price(
@@ -269,6 +386,7 @@ def update_trade_price(
         }
     }
 
+
 @router.delete("/virtual-trades/{trade_id}", response_model=dict)
 def delete_virtual_trade(
     trade_id: int,
@@ -287,6 +405,7 @@ def delete_virtual_trade(
         "status": "success",
         "message": "Virtual trade deleted"
     }
+
 
 @router.get("/signals/{signal_id}/virtual-trades")
 def get_signal_virtual_trades(

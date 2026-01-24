@@ -1,7 +1,7 @@
 # backend/app/futures/services/signal_orchestrator.py
 import pandas as pd
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List
 import logging
 from app.futures.models.exchange_connector import ExchangeConnector
 from .ai_analyzer import AIAnalyzer
@@ -19,22 +19,35 @@ class SignalOrchestrator:
         try:
             self.logger.info(f"🔍 Генерація сигналу для {symbol} ({timeframe})")
             
-            # 1. Отримуємо дані
+            # 1. Отримуємо реальні дані (для майбутньої інтеграції)
             df = self.exchange.fetch_ohlcv(symbol, timeframe, limit=200)
-            if len(df) < 50:
-                return {'error': 'Недостатньо даних', 'symbol': symbol}
             
-            # 2. Аналізуємо (ВИПРАВЛЕНО: використовуємо правильну назву методу)
-            indicators = self.analyzer._calculate_indicators(df)  # або .calculate_indicators(df)
-            analysis = self.analyzer.generate_signal(symbol, df, indicators)
+            # 2. Аналізуємо через AI (користуємось нашою імітаційною моделлю)
+            # Примітка: поточний AIAnalyzer НЕ використовує df, але ми передаємо його
+            # для майбутньої реалізації з реальним аналізом
+            analysis = self.analyzer.analyze_market(symbol, timeframe)
             
-            # 3. Генеруємо пояснення
+            # 3. Додаємо реальні ціни з біржі замість імітованих
+            ticker = self.exchange.fetch_ticker(symbol)
+            if ticker:
+                current_price = ticker['last']
+                analysis['entry_price'] = current_price
+                # Перераховуємо TP/SL на основі реальної ціни
+                if analysis['direction'] == "long":
+                    analysis['take_profit'] = current_price * 1.03
+                    analysis['stop_loss'] = current_price * 0.98
+                else:
+                    analysis['take_profit'] = current_price * 0.97
+                    analysis['stop_loss'] = current_price * 1.02
+            
+            # 4. Генеруємо пояснення
             explanation = self.explainer.build_explanation(analysis)
             analysis['explanation'] = explanation
             
-            # 4. Додаємо метадані
+            # 5. Додаємо метадані
             analysis['timestamp'] = datetime.now().isoformat()
             analysis['timeframe'] = timeframe
+            analysis['symbol'] = symbol
             
             self.logger.info(f"✅ Сигнал згенеровано: {analysis['direction']} з впевненістю {analysis['confidence']}")
             return analysis
