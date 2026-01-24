@@ -188,6 +188,7 @@ class AIAnalyzer:
         else:
             take_profit = current_price
             stop_loss = current_price
+            total_confidence = max(0.3, total_confidence * 0.7)
         
         # Фактори для пояснення
         factors = {
