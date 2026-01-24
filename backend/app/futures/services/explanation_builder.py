@@ -1,68 +1,52 @@
-"""
-ExplanationBuilder для генерації текстових пояснень сигналів.
-"""
-
-import random
-from typing import Dict, List
+# backend/app/futures/services/explanation_builder.py
+from typing import Dict
 
 class ExplanationBuilder:
-    """Генерує людсько-зрозумілі пояснення на основі AI-аналізу"""
-    
     def __init__(self):
-        self.templates = self._load_templates()
-    
-    def _load_templates(self) -> Dict[str, List[str]]:
-        return {
-            "trend": [
-                "{symbol} демонструє {strength} {direction_ua} тренд ({confidence}%).",
-                "Технічний аналіз виявляє {direction_ua} динаміку для {symbol}.",
-                "Індикатори підтверджують {direction_ua} позицію для {symbol}."
-            ],
-            "level": [
-                "{symbol} тестує рівень {level_type}, що формує {direction_ua} сигнал.",
-                "Ціна наближається до {level_type} рівня, створюючи {direction_ua} можливість.",
-                "Прорив {level_type} рівня підтверджує {direction_ua} сигнал."
-            ]
+        self.templates = {
+            'long': {
+                'strong': "🟢 СИЛЬНИЙ ПОЗИТИВНИЙ СИГНАЛ. Тренд чіткий вгору з впевненістю {confidence}%. "
+                         "RSI ({rsi}) показує недооціненість, MACD підтверджує зростання. "
+                         "Входимо довгими з TP: ${tp} та SL: ${sl}.",
+                'medium': "🟡 ПОМІРНИЙ ПОЗИТИВНИЙ СИГНАЛ. Потенціал для росту є з впевненістю {confidence}%. "
+                         "Рекомендовано обережне входження. TP: ${tp}, SL: ${sl}.",
+                'weak': "⚪ СЛАБКИЙ СИГНАЛ. Незначні позитивні ознаки ({confidence}%). "
+                       "Чекаємо підтвердження. TP: ${tp}, SL: ${sl}."
+            },
+            'short': {
+                'strong': "🔴 СИЛЬНИЙ НЕГАТИВНИЙ СИГНАЛ. Тренд чіткий вниз з впевненістю {confidence}%. "
+                         "RSI ({rsi}) показує перекупленість. Входимо короткими з TP: ${tp} та SL: ${sl}.",
+                'medium': "🟠 ПОМІРНИЙ НЕГАТИВНИЙ СИГНАЛ. Потенціал для падіння є з впевненістю {confidence}%. "
+                         "Обережне входження. TP: ${tp}, SL: ${sl}.",
+                'weak': "⚪ СЛАБКИЙ СИГНАЛ. Незначні негативні ознаки ({confidence}%). "
+                       "Чекаємо підтвердження. TP: ${tp}, SL: ${sl}."
+            }
         }
     
-    def build_explanation(self, symbol: str, direction: str, confidence: float, **kwargs) -> str:
-        """Основна функція генерації пояснення"""
+    def build_explanation(self, signal_data: Dict) -> str:
+        """Генерація текстового пояснення на основі сигналу"""
+        direction = signal_data.get('direction', 'neutral')
+        confidence = signal_data.get('confidence', 0)
+        rsi = signal_data.get('indicators', {}).get('rsi', 50)
         
-        # Переклад напрямку
-        direction_ua = "позитивний" if direction == "long" else "негативний"
-        
-        # Визначення сили сигналу
-        if confidence > 0.8:
-            strength = "дуже сильний"
-        elif confidence > 0.65:
-            strength = "сильний"
+        # Визначаємо силу сигналу
+        if confidence > 0.75:
+            strength = 'strong'
+        elif confidence > 0.6:
+            strength = 'medium'
         else:
-            strength = "помірний"
+            strength = 'weak'
         
-        # Вибір типу шаблону
-        template_type = "trend"
-        level_type = "підтримки" if direction == "long" else "опору"
+        # Беремо шаблон
+        template = self.templates.get(direction, {}).get(strength, "Немає чіткого сигналу.")
         
-        # Вибір випадкового шаблону
-        template = random.choice(self.templates[template_type])
-        
-        # Форматування
+        # Форматуємо
         explanation = template.format(
-            symbol=symbol,
-            direction_ua=direction_ua,
-            strength=strength,
             confidence=int(confidence * 100),
-            level_type=level_type
+            rsi=round(rsi, 1),
+            tp=round(signal_data.get('take_profit', 0), 2),
+            sl=round(signal_data.get('stop_loss', 0), 2),
+            entry=round(signal_data.get('entry_price', 0), 2)
         )
         
-        # Додавання рекомендації
-        if confidence > 0.7:
-            explanation += " Рекомендовано розглянути позицію."
-        elif confidence > 0.5:
-            explanation += " Можлива позиція з обережністю."
-        
         return explanation
-
-
-# Глобальний екземпляр
-explanation_builder = ExplanationBuilder()

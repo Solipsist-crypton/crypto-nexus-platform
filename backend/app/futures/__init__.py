@@ -1,10 +1,12 @@
-# Futures module exports
-from .models import Signal, VirtualTrade
-from .services.explanation_builder import ExplanationBuilder, explanation_builder
+# backend/app/futures/__init__.py
+from .models.exchange_connector import ExchangeConnector
+from .services.ai_analyzer import AIAnalyzer
+from .services.explanation_builder import ExplanationBuilder
+from .services.signal_orchestrator import SignalOrchestrator
 
 __all__ = [
-    "Signal", 
-    "VirtualTrade", 
-    "ExplanationBuilder", 
-    "explanation_builder"
+    'ExchangeConnector',
+    'AIAnalyzer', 
+    'ExplanationBuilder',
+    'SignalOrchestrator'
 ]
