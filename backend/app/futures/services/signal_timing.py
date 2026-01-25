@@ -119,7 +119,7 @@ class SignalTimingService:
             }
         
         # Перевіряємо чи користувач вже має угоду для цього сигналу
-        from ...models import VirtualTrade
+        from app.futures.models import VirtualTrade
         existing_trade = db.query(VirtualTrade).filter(
             VirtualTrade.signal_id == signal_id,
             VirtualTrade.user_id == user_id

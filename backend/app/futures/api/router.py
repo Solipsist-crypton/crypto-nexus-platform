@@ -11,7 +11,7 @@ from app.futures.services.explanation_builder import ExplanationBuilder
 from app.futures.services.ai_analyzer import AIAnalyzer
 from app.futures.models.exchange_connector import ExchangeConnector
 from app.futures.services.signal_orchestrator import SignalOrchestrator
-
+from app.futures.models import VirtualTrade
 router = APIRouter(tags=["futures"])
 
 # Створюємо екземпляри сервісів

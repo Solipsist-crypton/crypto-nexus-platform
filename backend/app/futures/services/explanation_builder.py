@@ -60,8 +60,16 @@ class ExplanationBuilder:
         
         # Форматуємо
         factors = signal_data.get('factors', {})
-        factors_count = len([v for v in factors.values() if v > 0.6]) if isinstance(factors, dict) else 0
-        
+        # factors_count = len([v for v in factors.values() if v > 0.6]) if isinstance(factors, dict) else 0
+        factors_count = 0
+        if isinstance(factors, dict):
+            for v in factors.values():
+                try:
+                    if float(v) > 0.6:  # Спробувати конвертувати в число
+                        factors_count += 1
+                except (ValueError, TypeError):
+                     continue
+
         explanation = template.format(
             symbol=signal_data.get('symbol', 'Unknown'),
             confidence=int(confidence),
