@@ -10,7 +10,20 @@ def test_real_analysis():
     
     analyzer = AIAnalyzer()
     
-    symbols = ['BTC/USDT:USDT', 'ETH/USDT:USDT', 'SOL/USDT:USDT']
+    symbols = [
+    'BTC/USDT:USDT',
+    'ETH/USDT:USDT', 
+    'SOL/USDT:USDT',
+    'XRP/USDT:USDT',      # Просто додайте сюди
+    'ADA/USDT:USDT',
+    'AVAX/USDT:USDT',
+    'DOT/USDT:USDT',
+    'DOGE/USDT:USDT',
+    'LINK/USDT:USDT',
+    'ATOM/USDT:USDT',
+    'UNI/USDT:USDT',
+    'FIL/USDT:USDT'
+]
     
     for symbol in symbols:
         print(f"\n🔍 Аналіз {symbol}:")
