@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import logging
-
+from .celery_app import celery_app as celery_instance
+from .services.price_updater_service import start_price_updater, stop_price_updater
 # Імпортуємо моделі
 from .database import engine, Base
 from .models import arbitrage as arbitrage_models
@@ -24,6 +25,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
+# Запуск при старті
+@app.on_event("startup")
+async def startup_event():
+    start_price_updater()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    stop_price_updater()
 
 # CORS налаштування
 app.add_middleware(
