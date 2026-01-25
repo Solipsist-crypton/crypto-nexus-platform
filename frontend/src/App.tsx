@@ -7,6 +7,7 @@ import Futures from './pages/Futures'
 import Airdrops from './pages/Airdrops'
 import Dashboard from './pages/Dashboard'
 import Layout from './components/layout/Layout'
+import ProfilePage from './features/profile/ProfilePage';
 import './styles/globals.css'
 
 const App: React.FC = () => {
@@ -18,6 +19,7 @@ const App: React.FC = () => {
         <Route path="/futures" element={<Layout><Futures /></Layout>} />
         <Route path="/airdrops" element={<Layout><Airdrops /></Layout>} />
         <Route path="/dashboard" element={<Layout><Dashboard /></Layout>} />
+        <Route path="/profile" element={<Layout><ProfilePage /></Layout>} />
       </Routes>
     </Router>
   )

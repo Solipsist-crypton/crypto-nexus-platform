@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { Menu, X, Bell, User, Moon, Sun } from 'lucide-react'
-
+import { Link } from 'react-router-dom';
 const Header: React.FC = () => {
   const [isDark, setIsDark] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -49,9 +49,9 @@ const Header: React.FC = () => {
               <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
             </button>
             
-            <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
+            <Link to="/profile" className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800">
               <User size={20} />
-            </button>
+            </Link>
 
             {/* Mobile Menu Button */}
             <button

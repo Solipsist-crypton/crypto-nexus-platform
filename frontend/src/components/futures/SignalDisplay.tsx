@@ -50,12 +50,63 @@ const SignalDisplay: React.FC<SignalDisplayProps> = ({
   const directionBg = isLong ? 'bg-green-900/30' : 'bg-red-900/30';
   const directionEmoji = isLong ? '📈 LONG' : '📉 SHORT';
 
-  // Функція для розрахунку відсотків
-  const calculatePercentage = (entry: number, target: number, isProfit: boolean): string => {
+  // ВИПРАВЛЕНА ФУНКЦІЯ: Правильний розрахунок відсотків для TP/SL
+  const calculatePercentage = (entry: number, target: number, isTakeProfit: boolean): string => {
     const change = ((target - entry) / entry) * 100;
-    const sign = change >= 0 ? '+' : '';
-    const emoji = isProfit ? '📈' : '📉';
-    return `${emoji} ${sign}${change.toFixed(2)}%`;
+    
+    // Для LONG: TP має бути вище (+), SL нижче (-)
+    // Для SHORT: TP має бути нижче (-), SL вище (+)
+    
+    if (isLong) {
+      // LONG позиція
+      if (isTakeProfit) {
+        // TP для LONG: має бути +
+        return `${change >= 0 ? '📈' : '📉'} ${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+      } else {
+        // SL для LONG: має бути -
+        return `${change < 0 ? '📉' : '📈'} ${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+      }
+    } else {
+      // SHORT позиція
+      if (isTakeProfit) {
+        // TP для SHORT: має бути -
+        return `${change < 0 ? '📉' : '📈'} ${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+      } else {
+        // SL для SHORT: має бути +
+        return `${change >= 0 ? '📈' : '📉'} ${change >= 0 ? '+' : ''}${change.toFixed(2)}%`;
+      }
+    }
+  };
+
+  // ПОКРАЩЕНЕ ПОЯСНЕННЯ AI
+  const getAIExplanation = () => {
+    if (!signal.explanation) {
+      const reasons = [];
+      
+      if (signal.factors) {
+        if (signal.factors.trend_score > 0.7) {
+          reasons.push("сильний тренд");
+        }
+        if (signal.factors.momentum_score > 0.7) {
+          reasons.push("сильний моментум");
+        }
+        if (signal.factors.volume_confirmation > 0.7) {
+          reasons.push("підтвердження об'ємом");
+        }
+        if (signal.factors.rsi_level < 30) {
+          reasons.push("перепроданість (RSI < 30)");
+        } else if (signal.factors.rsi_level > 70) {
+          reasons.push("перекупленість (RSI > 70)");
+        }
+      }
+      
+      if (reasons.length > 0) {
+        return `AI бачить ${reasons.join(', ')} для ${isLong ? 'росту' : 'падіння'} ціни.`;
+      }
+      
+      return `AI рекомендує ${isLong ? 'купувати (LONG)' : 'продавати (SHORT)'} з впевненістю ${Math.round(signal.confidence * 100)}%.`;
+    }
+    return signal.explanation;
   };
 
   return (
@@ -87,8 +138,13 @@ const SignalDisplay: React.FC<SignalDisplayProps> = ({
           <div className="text-2xl font-bold text-green-400">
             ${parseFloat(signal.take_profit).toFixed(2)}
           </div>
-          <div className="text-sm text-green-300 mt-1">
-            {calculatePercentage(signal.entry_price, signal.take_profit, isLong)}
+          <div className={`text-sm mt-1 ${
+            isLong ? 'text-green-300' : 'text-red-300'  // Для SHORT TP показуємо червоним
+          }`}>
+            {calculatePercentage(signal.entry_price, signal.take_profit, true)}
+          </div>
+          <div className="text-xs text-gray-400 mt-1">
+            {isLong ? 'Ціль зростання' : 'Ціль падіння'}
           </div>
         </div>
         
@@ -97,21 +153,67 @@ const SignalDisplay: React.FC<SignalDisplayProps> = ({
           <div className="text-2xl font-bold text-red-400">
             ${parseFloat(signal.stop_loss).toFixed(2)}
           </div>
-          <div className="text-sm text-red-300 mt-1">
-            {calculatePercentage(signal.entry_price, signal.stop_loss, !isLong)}
+          <div className={`text-sm mt-1 ${
+            isLong ? 'text-red-300' : 'text-green-300'  // Для SHORT SL показуємо зеленим
+          }`}>
+            {calculatePercentage(signal.entry_price, signal.stop_loss, false)}
+          </div>
+          <div className="text-xs text-gray-400 mt-1">
+            {isLong ? 'Захист від падіння' : 'Захист від зростання'}
           </div>
         </div>
       </div>
 
-      {/* Пояснення AI */}
-      {signal.explanation && (
-        <div className="bg-gray-700/50 p-4 rounded-lg">
-          <h4 className="font-bold mb-2 flex items-center">
-            <span className="mr-2">🧠</span> Логіка AI
-          </h4>
-          <p className="text-gray-300">{signal.explanation}</p>
-        </div>
-      )}
+      {/* ПОКРАЩЕНЕ ПОЯСНЕННЯ AI */}
+      <div className="bg-gray-700/50 p-4 rounded-lg">
+        <h4 className="font-bold mb-2 flex items-center">
+          <span className="mr-2">🧠</span> Логіка AI: Чому {isLong ? 'вгору' : 'вниз'}?
+        </h4>
+        <p className="text-gray-300 mb-3">{getAIExplanation()}</p>
+        
+        {signal.factors && (
+          <div className="mt-3 pt-3 border-t border-gray-600">
+            <div className="text-sm text-gray-400 mb-2">Деталі аналізу:</div>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              {signal.factors.trend_score && (
+                <div className="flex justify-between">
+                  <span>Сила тренду:</span>
+                  <span className="text-yellow-300">
+                    {Math.round(signal.factors.trend_score * 100)}%
+                  </span>
+                </div>
+              )}
+              {signal.factors.momentum_score && (
+                <div className="flex justify-between">
+                  <span>Моментум:</span>
+                  <span className="text-yellow-300">
+                    {Math.round(signal.factors.momentum_score * 100)}%
+                  </span>
+                </div>
+              )}
+              {signal.factors.volume_confirmation && (
+                <div className="flex justify-between">
+                  <span>Підтвердження об'ємом:</span>
+                  <span className="text-yellow-300">
+                    {Math.round(signal.factors.volume_confirmation * 100)}%
+                  </span>
+                </div>
+              )}
+              {signal.factors.rsi_level && (
+                <div className="flex justify-between">
+                  <span>RSI рівень:</span>
+                  <span className={
+                    signal.factors.rsi_level < 30 ? 'text-green-300' : 
+                    signal.factors.rsi_level > 70 ? 'text-red-300' : 'text-yellow-300'
+                  }>
+                    {Math.round(signal.factors.rsi_level)}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Кнопки дій */}
       <div className="flex flex-col sm:flex-row gap-3 pt-4">
@@ -121,7 +223,9 @@ const SignalDisplay: React.FC<SignalDisplayProps> = ({
           className={`flex-1 py-3 rounded-lg font-bold transition-all ${
             loading 
               ? 'bg-gray-700 cursor-not-allowed' 
-              : 'bg-green-600 hover:bg-green-700 active:scale-95'
+              : isLong 
+                ? 'bg-green-600 hover:bg-green-700 active:scale-95' 
+                : 'bg-red-600 hover:bg-red-700 active:scale-95'
           }`}
         >
           {loading ? (
@@ -131,7 +235,8 @@ const SignalDisplay: React.FC<SignalDisplayProps> = ({
             </span>
           ) : (
             <span className="flex items-center justify-center">
-              <span className="mr-2">🎯</span> ВІДСТЕЖУВАТИ ЦЕЙ СИГНАЛ
+              <span className="mr-2">{isLong ? '📈' : '📉'}</span>
+              ВІДСТЕЖУВАТИ {isLong ? 'LONG' : 'SHORT'}
             </span>
           )}
         </button>
