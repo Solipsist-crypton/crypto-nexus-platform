@@ -1,0 +1,329 @@
+<!-- Створи frontend/public/futures-test.html -->
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎯 Ф'ючерсні Сигнали AI - Тест</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Шапка -->
+        <div class="text-center mb-10">
+            <h1 class="text-4xl font-bold mb-2">
+                <i class="fas fa-chart-line text-green-400"></i> 🎯 Ф'ючерсні Сигнали AI
+            </h1>
+            <p class="text-gray-400">Тестова сторінка для віртуальної торгівлі</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Ліва колонка: Список монет -->
+            <div class="bg-gray-800 rounded-xl p-6">
+                <h2 class="text-xl font-bold mb-4 flex items-center">
+                    <i class="fas fa-coins mr-2 text-yellow-400"></i> Оберіть монету
+                </h2>
+                
+                <div class="space-y-3">
+                    <div class="coin-item bg-gray-700 p-4 rounded-lg hover:bg-gray-600 cursor-pointer" data-symbol="BTC/USDT:USDT">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <span class="font-bold">BTC/USDT</span>
+                                <span class="text-gray-400 text-sm ml-2">Bitcoin</span>
+                            </div>
+                            <button class="analyze-btn bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
+                                <i class="fas fa-magic mr-2"></i>Аналізувати
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="coin-item bg-gray-700 p-4 rounded-lg hover:bg-gray-600 cursor-pointer" data-symbol="ETH/USDT:USDT">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <span class="font-bold">ETH/USDT</span>
+                                <span class="text-gray-400 text-sm ml-2">Ethereum</span>
+                            </div>
+                            <button class="analyze-btn bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
+                                <i class="fas fa-magic mr-2"></i>Аналізувати
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="coin-item bg-gray-700 p-4 rounded-lg hover:bg-gray-600 cursor-pointer" data-symbol="SOL/USDT:USDT">
+                        <div class="flex justify-between items-center">
+                            <div>
+                                <span class="font-bold">SOL/USDT</span>
+                                <span class="text-gray-400 text-sm ml-2">Solana</span>
+                            </div>
+                            <button class="analyze-btn bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg">
+                                <i class="fas fa-magic mr-2"></i>Аналізувати
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Центральна колонка: AI сигнал -->
+            <div class="bg-gray-800 rounded-xl p-6 lg:col-span-2">
+                <h2 class="text-xl font-bold mb-4 flex items-center">
+                    <i class="fas fa-robot mr-2 text-purple-400"></i> AI Сигнал
+                </h2>
+                
+                <div id="signal-container" class="text-center py-10">
+                    <div class="text-gray-500">
+                        <i class="fas fa-robot text-4xl mb-4"></i>
+                        <p>Оберіть монету та натисніть "Аналізувати"</p>
+                        <p class="text-sm mt-2">AI проаналізує ринок та згенерує сигнал</p>
+                    </div>
+                </div>
+
+                <!-- Статистика -->
+                <div class="mt-8 pt-6 border-t border-gray-700">
+                    <h3 class="font-bold mb-3"><i class="fas fa-chart-bar mr-2"></i>Статистика</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="stat bg-gray-700 p-4 rounded-lg">
+                            <div class="text-sm text-gray-400">Активних угод</div>
+                            <div id="active-trades" class="text-2xl font-bold text-green-400">0</div>
+                        </div>
+                        <div class="stat bg-gray-700 p-4 rounded-lg">
+                            <div class="text-sm text-gray-400">Завершених</div>
+                            <div id="closed-trades" class="text-2xl font-bold">0</div>
+                        </div>
+                        <div class="stat bg-gray-700 p-4 rounded-lg">
+                            <div class="text-sm text-gray-400">Win Rate</div>
+                            <div id="win-rate" class="text-2xl font-bold">0%</div>
+                        </div>
+                        <div class="stat bg-gray-700 p-4 rounded-lg">
+                            <div class="text-sm text-gray-400">Загальний PnL</div>
+                            <div id="total-pnl" class="text-2xl font-bold">0%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Мої угоди -->
+        <div class="mt-8 bg-gray-800 rounded-xl p-6">
+            <h2 class="text-xl font-bold mb-4 flex items-center">
+                <i class="fas fa-history mr-2 text-orange-400"></i> Мої Віртуальні Угоди
+            </h2>
+            <div id="trades-container" class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="text-left border-b border-gray-700">
+                            <th class="pb-3">Символ</th>
+                            <th class="pb-3">Напрямок</th>
+                            <th class="pb-3">Вхід</th>
+                            <th class="pb-3">Поточна</th>
+                            <th class="pb-3">PnL%</th>
+                            <th class="pb-3">Статус</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trades-body">
+                        <!-- Тут будуть угоди -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:5000/api/futures';
+        
+        // Завантажити статистику при запуску
+        loadStats();
+        loadTrades();
+
+        // Обробка кнопок "Аналізувати"
+        document.querySelectorAll('.analyze-btn').forEach(btn => {
+            btn.addEventListener('click', async function(e) {
+                e.stopPropagation();
+                const coinItem = this.closest('.coin-item');
+                const symbol = coinItem.dataset.symbol;
+                
+                await generateSignal(symbol);
+            });
+        });
+
+        async function generateSignal(symbol) {
+            const container = document.getElementById('signal-container');
+            container.innerHTML = `
+                <div class="text-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                    <p>AI аналізує ${symbol}...</p>
+                </div>
+            `;
+
+            try {
+                const response = await fetch(`${API_BASE}/signals/generate?symbol=${encodeURIComponent(symbol)}`, {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Помилка: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const signal = data.signal;
+                    const directionEmoji = signal.direction === 'long' ? '📈' : '📉';
+                    const colorClass = signal.direction === 'long' ? 'text-green-400' : 'text-red-400';
+                    
+                    container.innerHTML = `
+                        <div class="bg-gray-900 p-6 rounded-xl">
+                            <div class="flex justify-between items-center mb-4">
+                                <h3 class="text-xl font-bold ${colorClass}">
+                                    ${directionEmoji} ${signal.symbol} ${signal.direction.toUpperCase()}
+                                </h3>
+                                <span class="px-3 py-1 bg-${signal.direction === 'long' ? 'green' : 'red'}-900 text-${signal.direction === 'long' ? 'green' : 'red'}-400 rounded-full">
+                                    ${(signal.confidence * 100).toFixed(0)}% впевненості
+                                </span>
+                            </div>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                                <div class="text-center p-4 bg-gray-700 rounded-lg">
+                                    <div class="text-gray-400">Вхідна ціна</div>
+                                    <div class="text-2xl font-bold">$${parseFloat(signal.entry_price).toFixed(2)}</div>
+                                </div>
+                                <div class="text-center p-4 bg-green-900/30 rounded-lg">
+                                    <div class="text-gray-400">Take Profit</div>
+                                    <div class="text-2xl font-bold text-green-400">$${parseFloat(signal.take_profit).toFixed(2)}</div>
+                                </div>
+                                <div class="text-center p-4 bg-red-900/30 rounded-lg">
+                                    <div class="text-gray-400">Stop Loss</div>
+                                    <div class="text-2xl font-bold text-red-400">$${parseFloat(signal.stop_loss).toFixed(2)}</div>
+                                </div>
+                            </div>
+                            
+                            ${signal.explanation ? `
+                            <div class="mt-4 p-4 bg-gray-700 rounded-lg">
+                                <h4 class="font-bold mb-2"><i class="fas fa-brain mr-2"></i>Логіка AI</h4>
+                                <p class="text-gray-300">${signal.explanation}</p>
+                            </div>
+                            ` : ''}
+                            
+                            <div class="mt-6 flex space-x-4">
+                                <button onclick="enterTrade(${signal.id})" class="flex-1 bg-green-600 hover:bg-green-700 py-3 rounded-lg font-bold">
+                                    <i class="fas fa-play mr-2"></i>ВХІД
+                                </button>
+                                <button onclick="generateSignal('${symbol}')" class="flex-1 bg-gray-700 hover:bg-gray-600 py-3 rounded-lg">
+                                    <i class="fas fa-redo mr-2"></i>Переаналізувати
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = `
+                        <div class="text-center text-red-400">
+                            <i class="fas fa-exclamation-triangle text-3xl mb-3"></i>
+                            <p>Помилка: ${data.error || 'Невідома помилка'}</p>
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                container.innerHTML = `
+                    <div class="text-center text-red-400">
+                        <i class="fas fa-exclamation-triangle text-3xl mb-3"></i>
+                        <p>Помилка з'єднання: ${error.message}</p>
+                        <p class="text-sm mt-2">Перевірте чи запущений бекенд на порті 5000</p>
+                    </div>
+                `;
+            }
+        }
+
+        async function enterTrade(signalId) {
+            try {
+                const response = await fetch(`${API_BASE}/entry-points/enter/${signalId}`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert('✅ Віртуальну угоду створено!');
+                    loadTrades();
+                    loadStats();
+                } else {
+                    alert(`❌ Помилка: ${data.detail || data.error}`);
+                }
+            } catch (error) {
+                alert('❌ Помилка з\'єднання');
+            }
+        }
+
+        async function loadTrades() {
+            try {
+                const response = await fetch(`${API_BASE}/virtual-trades`);
+                const data = await response.json();
+                
+                const tbody = document.getElementById('trades-body');
+                tbody.innerHTML = '';
+                
+                if (data.trades && data.trades.length > 0) {
+                    data.trades.forEach(trade => {
+                        const pnl = parseFloat(trade.pnl_percentage || 0);
+                        const pnlColor = pnl >= 0 ? 'text-green-400' : 'text-red-400';
+                        const statusMap = {
+                            'active': { text: '🟢 Активна', color: 'text-green-400' },
+                            'tp_hit': { text: '🎯 TP досягнуто', color: 'text-green-400' },
+                            'sl_hit': { text: '🛑 SL досягнуто', color: 'text-red-400' },
+                            'closed': { text: '⚫ Закрита', color: 'text-gray-400' }
+                        };
+                        const status = statusMap[trade.status] || { text: trade.status, color: 'text-gray-400' };
+                        
+                        const row = `
+                            <tr class="border-b border-gray-700 hover:bg-gray-750">
+                                <td class="py-3">${trade.symbol}</td>
+                                <td class="py-3">
+                                    <span class="${trade.direction === 'long' ? 'text-green-400' : 'text-red-400'}">
+                                        ${trade.direction === 'long' ? '📈 LONG' : '📉 SHORT'}
+                                    </span>
+                                </td>
+                                <td class="py-3">$${parseFloat(trade.entry_price).toFixed(2)}</td>
+                                <td class="py-3">$${parseFloat(trade.current_price).toFixed(2)}</td>
+                                <td class="py-3 ${pnlColor} font-bold">${pnl.toFixed(2)}%</td>
+                                <td class="py-3 ${status.color}">${status.text}</td>
+                            </tr>
+                        `;
+                        tbody.innerHTML += row;
+                    });
+                } else {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="py-8 text-center text-gray-500">
+                                <i class="fas fa-inbox text-3xl mb-3"></i>
+                                <p>Немає віртуальних угод</p>
+                            </td>
+                        </tr>
+                    `;
+                }
+            } catch (error) {
+                console.error('Помилка завантаження угод:', error);
+            }
+        }
+
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_BASE}/virtual-trades/statistics`);
+                const data = await response.json();
+                
+                document.getElementById('active-trades').textContent = data.active_trades || 0;
+                document.getElementById('closed-trades').textContent = data.closed_trades || 0;
+                document.getElementById('win-rate').textContent = `${data.win_rate || 0}%`;
+                document.getElementById('total-pnl').textContent = `${data.total_pnl || 0}%`;
+            } catch (error) {
+                console.error('Помилка завантаження статистики:', error);
+            }
+        }
+
+        // Оновлювати кожні 30 секунд
+        setInterval(() => {
+            loadTrades();
+            loadStats();
+        }, 30000);
+    </script>
+</body>
+</html>
