@@ -1,91 +1,75 @@
-# backend/test_simple_trade.py
+# backend/test_simple_fix.py
 import sys
 sys.path.append('.')
-from app.database import SessionLocal
-from app.futures.models.signal import Signal
-from app.futures.models.virtual_trade import VirtualTrade
+from app.futures.models.exchange_connector import ExchangeConnector
 
-print("🧪 ПРОСТИЙ ТЕСТ СТВОРЕННЯ УГОДИ")
+print("🧪 ПРОСТИЙ ТЕСТ ПІСЛЯ ФІКСУ")
 print("=" * 50)
 
-db = SessionLocal()
+exchange = ExchangeConnector()
 
+# Тестуємо різні формати
+test_cases = [
+    "BTCUSDT",           # Чистий формат
+    "BTC/USDT:USDT",     # Формат з Фази 1
+    "ETHUSDT",
+    "SOL/USDT:USDT",
+]
+
+print("📊 Тестуємо символи:")
+for symbol in test_cases:
+    try:
+        ticker = exchange.fetch_ticker(symbol)
+        if ticker:
+            print(f"✅ {symbol:20} → ${ticker['last']:,.2f}")
+        else:
+            print(f"❌ {symbol:20} → Немає даних")
+    except Exception as e:
+        print(f"❌ {symbol:20} → Помилка: {str(e)[:50]}")
+
+print("\n🎯 Створюємо тестову віртуальну угоду:")
 try:
-    # 1. Знаходимо або створюємо сигнал
-    signal = db.query(Signal).first()
-    if not signal:
-        print("📝 Створюємо тестовий сигнал...")
-        signal = Signal(
-            symbol="BTCUSDT",
-            direction="long",
-            confidence=0.85,
-            entry_price=42150.75,
-            take_profit=44000.0,
-            stop_loss=41500.0,
-            timeframe="1h",
-            is_active=True,
-            reasoning_weights={"ta": 0.6, "sentiment": 0.4},
-            explanation_text="Test signal for virtual trading"
-        )
-        db.add(signal)
-        db.commit()
-        db.refresh(signal)
+    from app.database import SessionLocal
+    from app.futures.services.trade_executor import VirtualTradeExecutor
+    from app.futures.models import Signal, VirtualTrade
     
-    print(f"📊 Використовуємо сигнал ID: {signal.id}")
-    print(f"   Symbol: {signal.symbol}")
-    print(f"   Direction: {signal.direction}")
+    db = SessionLocal()
     
-    # 2. Створюємо віртуальну угоду
-    trade = VirtualTrade(
-        signal_id=signal.id,
-        user_id=1,
-        symbol=signal.symbol,
-        direction=signal.direction,
-        entry_price=signal.entry_price,
-        take_profit=signal.take_profit,
-        stop_loss=signal.stop_loss,
-        current_price=signal.entry_price,
-        status="active",
-        pnl_percentage=0.0,
-        pnl_amount=0.0
+    # Створюємо тестовий сигнал
+    test_signal = Signal(
+        symbol="BTCUSDT",  # БЕЗ :USDT!
+        direction="long",
+        entry_price=88500.0,
+        take_profit=90000.0,
+        stop_loss=87000.0,
+        confidence=0.8,
+        timeframe="1h",
+        is_active=True
     )
-    
-    db.add(trade)
+    db.add(test_signal)
     db.commit()
-    db.refresh(trade)
+    db.refresh(test_signal)
     
-    print(f"✅ Віртуальна угода створена!")
-    print(f"   ID: {trade.id}")
-    print(f"   Symbol: {trade.symbol}")
-    print(f"   Entry: ${trade.entry_price}")
-    print(f"   TP: ${trade.take_profit}")
-    print(f"   SL: ${trade.stop_loss}")
+    print(f"✅ Створено сигнал ID: {test_signal.id}")
     
-    # 3. Тестуємо calculate_pnl
-    print("\n🧮 Тестуємо розрахунок PnL:")
+    # Тестуємо віртуальну угоду
+    executor = VirtualTradeExecutor()
+    trade = executor.create_virtual_trade(db, test_signal.id, 1)
     
-    # Симулюємо зростання ціни
-    new_price = 42500.0
-    trade.calculate_pnl(new_price)
-    db.commit()
+    if trade:
+        print(f"✅ Створено угоду ID: {trade.id}")
+        
+        # Оновлюємо ціну
+        result = executor.update_trade_prices(db, trade.id)
+        
+        if result:
+            print(f"💰 Ціна: ${result['price_updated']:,.2f}")
+            print(f"📊 PnL: {result['trade']['pnl_percentage']}%")
+            print(f"🎯 Статус: {result['trade']['status']}")
     
-    print(f"   Поточна ціна: ${new_price}")
-    print(f"   PnL: {trade.pnl_percentage:.2f}%")
-    print(f"   Статус: {trade.status}")
-    
-    # Симулюємо досягнення TP
-    print("\n🎯 Тестуємо Take Profit:")
-    trade.calculate_pnl(44100.0)
-    db.commit()
-    print(f"   Ціна: $44100.0")
-    print(f"   Статус: {trade.status}")
-    print(f"   PnL: {trade.pnl_percentage:.2f}%")
+    db.close()
     
 except Exception as e:
     print(f"❌ Помилка: {e}")
-    import traceback
-    traceback.print_exc()
-finally:
-    db.close()
 
 print("\n✅ ТЕСТ ЗАВЕРШЕНО")

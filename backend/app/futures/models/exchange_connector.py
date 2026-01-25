@@ -49,8 +49,6 @@ class ExchangeConnector:
     def fetch_ticker(self, symbol: str) -> Optional[Dict]:
         """Отримання поточних даних"""
         try:
-            if not symbol.endswith(':USDT'):
-                symbol = f"{symbol}:USDT"
             return self.exchange.fetch_ticker(symbol)
         except Exception as e:
             print(f"❌ Помилка ticker {symbol}: {e}")

@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 import logging
 from .celery_app import celery_app as celery_instance
 from .services.price_updater_service import start_price_updater, stop_price_updater
+
+from app.futures.api.entry_points import router as entry_points_router  # Додати
 # Імпортуємо моделі
 from .database import engine, Base
 from .models import arbitrage as arbitrage_models
@@ -53,6 +55,11 @@ app.include_router(coinbase_router, prefix="/api/coinbase", tags=["coinbase"])
 app.include_router(bybit_router, prefix="/api/bybit", tags=["bybit"])
 app.include_router(okx_router, prefix="/api/okx", tags=["okx"])
 app.include_router(futures_router, prefix="/api/futures", tags=["futures"])
+app.include_router(
+    entry_points_router,
+    prefix="/api/futures",  # Той самий prefix що і для futures
+    tags=["entry-points"]
+)
 # 2. ДОДАЙ РОУТЕР ДО APP (додай цей рядок):
 #app.include_router(gateio_router, prefix="/api/gateio", tags=["GateIO"])  # Заміни gateio
 # Створюємо таблиці в базі даних
