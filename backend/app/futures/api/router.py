@@ -330,6 +330,83 @@ def get_virtual_trades(
     }
 
 
+@router.get("/virtual-trades/statistics")
+def get_trade_statistics(db: Session = Depends(get_db)):
+    """Статистика віртуальних угод для профілю"""
+    try:
+        # Отримати всі угоди
+        all_trades = db.query(VirtualTrade).all()
+        
+        # 📌 ВИПРАВЛЕННЯ: Активні = тільки "active", завершені = всі інші статуси
+        active_trades = [t for t in all_trades if t.status == "active"]
+        closed_trades = [t for t in all_trades if t.status in ["tp_hit", "sl_hit", "closed"]]
+        
+        # Розрахувати PnL для завершених угод
+        total_pnl = 0.0
+        winning_trades = 0
+        losing_trades = 0
+        
+        for trade in closed_trades:
+            if hasattr(trade, 'pnl_percentage') and trade.pnl_percentage is not None:
+                pnl = float(trade.pnl_percentage)
+                total_pnl += pnl
+                if pnl > 0:
+                    winning_trades += 1
+                elif pnl < 0:
+                    losing_trades += 1
+        
+        # Розрахувати Win Rate
+        win_rate = (winning_trades / len(closed_trades) * 100) if closed_trades else 0.0
+        
+        # Розрахувати середній PnL
+        avg_pnl = (total_pnl / len(closed_trades)) if closed_trades else 0.0
+        
+        # Знайти найкращу угоду
+        best_trade = 0.0
+        if closed_trades:
+            best_pnls = [float(t.pnl_percentage) for t in closed_trades if t.pnl_percentage is not None]
+            best_trade = max(best_pnls, default=0.0)
+        
+        # 📌 ВІРТУАЛЬНИЙ БАЛАНС = $100 + відсотки від $100
+        # Додаємо PnL від активних угод теж (поточні)
+        current_pnl = 0.0
+        for trade in active_trades:
+            if hasattr(trade, 'pnl_percentage') and trade.pnl_percentage is not None:
+                current_pnl += float(trade.pnl_percentage)
+        
+        virtual_balance = 100.00 + (100.00 * (total_pnl + current_pnl) / 100)
+        
+        return {
+            "active_trades": len(active_trades),
+            "closed_trades": len(closed_trades),
+            "total_trades": len(all_trades),
+            "win_rate": f"{win_rate:.2f}",
+            "total_pnl": f"{total_pnl:.2f}",  # Тільки завершені угоди
+            "current_pnl": f"{current_pnl:.2f}",  # Активні угоди
+            "avg_pnl": f"{avg_pnl:.2f}",
+            "winning_trades": winning_trades,
+            "losing_trades": losing_trades,
+            "best_trade": f"{best_trade:.2f}",
+            "virtual_balance": round(virtual_balance, 2)
+        }
+        
+    except Exception as e:
+        # Якщо помилка - повертаємо нулі з балансом $100
+        return {
+            "active_trades": 0,
+            "closed_trades": 0,
+            "total_trades": 0,
+            "win_rate": "0",
+            "total_pnl": "0",
+            "current_pnl": "0",
+            "avg_pnl": "0",
+            "winning_trades": 0,
+            "losing_trades": 0,
+            "best_trade": "0",
+            "virtual_balance": 100.00,
+            "error": str(e)[:100]
+        }
+
 @router.get("/virtual-trades/{trade_id}", response_model=dict)
 def get_virtual_trade(
     trade_id: int,
@@ -429,79 +506,3 @@ def get_signal_virtual_trades(
         "trades": [trade.to_dict() for trade in trades]
     }
 
-@router.get("/virtual-trades/statistics")
-def get_trade_statistics(db: Session = Depends(get_db)):
-    """Статистика віртуальних угод для профілю"""
-    try:
-        # Отримати всі угоди
-        all_trades = db.query(VirtualTrade).all()
-        
-        # 📌 ВИПРАВЛЕННЯ: Активні = тільки "active", завершені = всі інші статуси
-        active_trades = [t for t in all_trades if t.status == "active"]
-        closed_trades = [t for t in all_trades if t.status in ["tp_hit", "sl_hit", "closed"]]
-        
-        # Розрахувати PnL для завершених угод
-        total_pnl = 0.0
-        winning_trades = 0
-        losing_trades = 0
-        
-        for trade in closed_trades:
-            if hasattr(trade, 'pnl_percentage') and trade.pnl_percentage is not None:
-                pnl = float(trade.pnl_percentage)
-                total_pnl += pnl
-                if pnl > 0:
-                    winning_trades += 1
-                elif pnl < 0:
-                    losing_trades += 1
-        
-        # Розрахувати Win Rate
-        win_rate = (winning_trades / len(closed_trades) * 100) if closed_trades else 0.0
-        
-        # Розрахувати середній PnL
-        avg_pnl = (total_pnl / len(closed_trades)) if closed_trades else 0.0
-        
-        # Знайти найкращу угоду
-        best_trade = 0.0
-        if closed_trades:
-            best_pnls = [float(t.pnl_percentage) for t in closed_trades if t.pnl_percentage is not None]
-            best_trade = max(best_pnls, default=0.0)
-        
-        # 📌 ВІРТУАЛЬНИЙ БАЛАНС = $100 + відсотки від $100
-        # Додаємо PnL від активних угод теж (поточні)
-        current_pnl = 0.0
-        for trade in active_trades:
-            if hasattr(trade, 'pnl_percentage') and trade.pnl_percentage is not None:
-                current_pnl += float(trade.pnl_percentage)
-        
-        virtual_balance = 100.00 + (100.00 * (total_pnl + current_pnl) / 100)
-        
-        return {
-            "active_trades": len(active_trades),
-            "closed_trades": len(closed_trades),
-            "total_trades": len(all_trades),
-            "win_rate": f"{win_rate:.2f}",
-            "total_pnl": f"{total_pnl:.2f}",  # Тільки завершені угоди
-            "current_pnl": f"{current_pnl:.2f}",  # Активні угоди
-            "avg_pnl": f"{avg_pnl:.2f}",
-            "winning_trades": winning_trades,
-            "losing_trades": losing_trades,
-            "best_trade": f"{best_trade:.2f}",
-            "virtual_balance": round(virtual_balance, 2)
-        }
-        
-    except Exception as e:
-        # Якщо помилка - повертаємо нулі з балансом $100
-        return {
-            "active_trades": 0,
-            "closed_trades": 0,
-            "total_trades": 0,
-            "win_rate": "0",
-            "total_pnl": "0",
-            "current_pnl": "0",
-            "avg_pnl": "0",
-            "winning_trades": 0,
-            "losing_trades": 0,
-            "best_trade": "0",
-            "virtual_balance": 100.00,
-            "error": str(e)[:100]
-        }

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import ProfileHeader from './components/ProfileHeader';
 import StatsDashboard from './components/StatsDashboard';
-import EquityChart from './components/EquityChart';
+// Видаляємо EquityChart
 import PerformanceChart from './components/PerformanceChart';
 import TradesTable from './components/TradesTable';
 import AIInsights from './components/AIInsights';
@@ -91,11 +91,8 @@ const ProfilePage: React.FC = () => {
           <StatsDashboard stats={stats} timeframe={timeframe} />
         </div>
 
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <div className="bg-gray-800/50 backdrop-blur-lg rounded-2xl p-6 border border-gray-700/50 shadow-2xl">
-            <EquityChart trades={trades} timeframe={timeframe} />
-          </div>
+        {/* Charts Section - ТІЛЬКИ PerformanceChart на весь рядок */}
+        <div className="mb-8">
           <div className="bg-gray-800/50 backdrop-blur-lg rounded-2xl p-6 border border-gray-700/50 shadow-2xl">
             <PerformanceChart trades={trades} timeframe={timeframe} />
           </div>
