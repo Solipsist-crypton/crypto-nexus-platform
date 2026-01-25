@@ -28,6 +28,8 @@ class AIAnalyzer:
             "expected_pnl": float
         }
         """
+        start_time = datetime.now()
+        
         try:
             # 1. Отримуємо більше даних для точного аналізу
             df = self.exchange.fetch_ohlcv(symbol, timeframe, limit=500)
@@ -67,8 +69,32 @@ class AIAnalyzer:
             return final_signal
             
         except Exception as e:
-            self.logger.error(f"❌ Помилка аналізу {symbol}: {e}")
-            return self._get_fallback_signal(symbol)
+            self.logger.error(f"❌ КРИТИЧНА помилка аналізу {symbol}: {e}", 
+                             exc_info=True, extra={'symbol': symbol})
+            
+            # ДЕТАЛЬНИЙ звіт про помилку
+            error_report = {
+                "direction": "neutral",
+                "confidence": 0.05,
+                "factors": {"error": str(e)[:100]},
+                "entry_price": 0,
+                "take_profit": 0,
+                "stop_loss": 0,
+                "risk_reward": 1.0,
+                "expected_pnl_percent": 0,
+                "position_size": {"size_percent": 0, "risk_per_trade": 0},
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "error": True,
+                "error_message": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+            return error_report
+        
+        finally:
+            # Логування часу виконання
+            execution_time = (datetime.now() - start_time).total_seconds()
+            self.logger.info(f"⏱️  Аналіз {symbol} зайняв {execution_time:.2f} секунд")
     
     def _calculate_all_indicators(self, df: pd.DataFrame) -> Dict:
         """РОЗРАХУНОК ВСІХ 8+ КРИТИЧНИХ ІНДИКАТОРІВ"""
@@ -78,7 +104,7 @@ class AIAnalyzer:
         volume = df['volume'].values
         
         indicators = {
-            # БАЗОВІ (вже є)
+            # БАЗОВІ
             'sma_20': self._calculate_sma(close, 20),
             'sma_50': self._calculate_sma(close, 50),
             'sma_200': self._calculate_sma(close, 200),
@@ -96,14 +122,14 @@ class AIAnalyzer:
             'volume_array': volume,
             
             # НОВІ ПРОФІ ІНДИКАТОРИ ⭐⭐⭐
-            'vwap': self._calculate_vwap(df),  # Volume Weighted Average Price
-            'stoch_rsi_k': self._calculate_stoch_rsi(close)[0],  # Stochastic RSI K
-            'stoch_rsi_d': self._calculate_stoch_rsi(close)[1],  # Stochastic RSI D
-            'ichimoku': self._calculate_ichimoku(df),  # Ichimoku Cloud
-            'obv': self._calculate_obv(close, volume),  # On-Balance Volume
-            'adl': self._calculate_adl(df),  # Accumulation/Distribution Line
-            'cci': self._calculate_cci(df, 20),  # Commodity Channel Index
-            'williams_r': self._calculate_williams_r(df, 14),  # Williams %R
+            'vwap': self._calculate_vwap(df),
+            'stoch_rsi_k': self._calculate_stoch_rsi(close)[0],
+            'stoch_rsi_d': self._calculate_stoch_rsi(close)[1],
+            'ichimoku': self._calculate_ichimoku(df),
+            'obv': self._calculate_obv(close, volume),
+            'adl': self._calculate_adl(df),
+            'cci': self._calculate_cci(df, 20),
+            'williams_r': self._calculate_williams_r(df, 14),
             
             # ДОДАТКОВІ
             'volume_sma': self._calculate_sma(volume, 20),
@@ -117,17 +143,16 @@ class AIAnalyzer:
     # ===== НОВІ ПРОФІ МЕТОДИ =====
     
     def _calculate_vwap(self, df: pd.DataFrame) -> np.ndarray:
-        """Volume Weighted Average Price (ВАЖЛИВО для інституційного аналізу)"""
+        """Volume Weighted Average Price"""
         typical_price = (df['high'] + df['low'] + df['close']) / 3
         vwap = (typical_price * df['volume']).cumsum() / df['volume'].cumsum()
         return vwap.values
     
     def _calculate_stoch_rsi(self, prices: np.ndarray, rsi_period: int = 14, stoch_period: int = 14) -> Tuple[np.ndarray, np.ndarray]:
-        """Stochastic RSI - суперчутливий індикатор перекупленості/перепроданості"""
+        """Stochastic RSI"""
         rsi = self._calculate_rsi(prices, rsi_period)
         rsi_series = pd.Series(rsi)
         
-        # Stochastic з RSI
         stoch_k = 100 * (rsi_series - rsi_series.rolling(stoch_period).min()) / \
                   (rsi_series.rolling(stoch_period).max() - rsi_series.rolling(stoch_period).min())
         stoch_d = stoch_k.rolling(3).mean()
@@ -135,28 +160,28 @@ class AIAnalyzer:
         return stoch_k.values, stoch_d.values
     
     def _calculate_ichimoku(self, df: pd.DataFrame) -> Dict:
-        """Ichimoku Cloud - комплексний аналіз тренду, підтримки та опору"""
+        """Ichimoku Cloud"""
         high, low, close = df['high'].values, df['low'].values, df['close'].values
         
-        # Tenkan-sen (Conversion Line)
+        # Tenkan-sen
         period9_high = pd.Series(high).rolling(9).max()
         period9_low = pd.Series(low).rolling(9).min()
         tenkan_sen = (period9_high + period9_low) / 2
         
-        # Kijun-sen (Base Line)
+        # Kijun-sen
         period26_high = pd.Series(high).rolling(26).max()
         period26_low = pd.Series(low).rolling(26).min()
         kijun_sen = (period26_high + period26_low) / 2
         
-        # Senkou Span A (Leading Span A)
+        # Senkou Span A
         senkou_span_a = ((tenkan_sen + kijun_sen) / 2).shift(26)
         
-        # Senkou Span B (Leading Span B)
+        # Senkou Span B
         period52_high = pd.Series(high).rolling(52).max()
         period52_low = pd.Series(low).rolling(52).min()
         senkou_span_b = ((period52_high + period52_low) / 2).shift(26)
         
-        # Chikou Span (Lagging Span)
+        # Chikou Span
         chikou_span = pd.Series(close).shift(-26)
         
         return {
@@ -173,7 +198,7 @@ class AIAnalyzer:
         }
     
     def _calculate_obv(self, prices: np.ndarray, volume: np.ndarray) -> np.ndarray:
-        """On-Balance Volume - дивергенція ціни та об'єму"""
+        """On-Balance Volume"""
         obv = np.zeros_like(prices)
         obv[0] = volume[0]
         
@@ -188,17 +213,17 @@ class AIAnalyzer:
         return obv
     
     def _calculate_adl(self, df: pd.DataFrame) -> np.ndarray:
-        """Accumulation/Distribution Line - грошовий потік"""
+        """Accumulation/Distribution Line"""
         high, low, close, volume = df['high'].values, df['low'].values, df['close'].values, df['volume'].values
         
-        clv = ((close - low) - (high - close)) / (high - low + 0.000001)  # + epsilon для поділу на 0
+        clv = ((close - low) - (high - close)) / (high - low + 0.000001)
         clv = np.nan_to_num(clv)
         adl = np.cumsum(clv * volume)
         
         return adl
     
     def _calculate_cci(self, df: pd.DataFrame, period: int = 20) -> np.ndarray:
-        """Commodity Channel Index - виявлення початку трендів"""
+        """Commodity Channel Index"""
         typical_price = (df['high'] + df['low'] + df['close']) / 3
         sma = typical_price.rolling(period).mean()
         mad = typical_price.rolling(period).apply(lambda x: np.mean(np.abs(x - np.mean(x))))
@@ -206,7 +231,7 @@ class AIAnalyzer:
         return cci.values
     
     def _calculate_williams_r(self, df: pd.DataFrame, period: int = 14) -> np.ndarray:
-        """Williams %R - індикатор перекупленості/перепроданості"""
+        """Williams %R"""
         high, low, close = df['high'].values, df['low'].values, df['close'].values
         
         highest_high = pd.Series(high).rolling(period).max()
@@ -230,23 +255,24 @@ class AIAnalyzer:
             'market_structure': self._analyze_market_structure(indicators),
         }
         
-        # 2. МНОЖИННА КОНФІРМАЦІЯ (необхідно 3+ з 5 категорій)
+        # 2. МНОЖИННА КОНФІРМАЦІЯ
+        long_votes = sum(1 for cat in signal_scores.values() if cat['direction'] == 'long')
+        short_votes = sum(1 for cat in signal_scores.values() if cat['direction'] == 'short')
+        neutral_votes = 5 - (long_votes + short_votes)
+        
         confirmed_categories = [cat for cat, score in signal_scores.items() if score['direction'] != 'neutral']
         confirmation_ratio = len(confirmed_categories) / 5
         
-        # 3. ВИЗНАЧЕННЯ НАПРЯМКУ
-        long_votes = sum(1 for cat in signal_scores.values() if cat['direction'] == 'long')
-        short_votes = sum(1 for cat in signal_scores.values() if cat['direction'] == 'short')
-        
-        if confirmation_ratio >= 0.6:
+        # 3. ВИЗНАЧЕННЯ НАПРЯМКУ ТА ВПЕВНЕНОСТІ
+        if confirmation_ratio >= 0.6:  # 3+ з 5 категорій підтверджують
             if long_votes > short_votes:
                 direction = 'long'
             elif short_votes > long_votes:
                 direction = 'short'
             else:
                 direction = 'neutral'
-    
-    # ДЕТЕРМІНОВАНА впевненість (без random!)
+            
+            # ІНТЕЛІГЕНТНА ВПЕВНЕНІСТЬ (без random!)
             if confirmation_ratio >= 0.85:
                 confidence_base = 0.85  # Дуже сильні сигнали
             elif confirmation_ratio >= 0.75:
@@ -255,51 +281,75 @@ class AIAnalyzer:
                 confidence_base = 0.65  # Середні сигнали
             else:  # 0.6-0.65
                 confidence_base = 0.55  # Слабкі але дійсні сигнали
-    
-    # Додаткова корекція на перевагу голосів
+            
+            # Корекція на перевагу голосів
             vote_diff = abs(long_votes - short_votes)
             if vote_diff >= 3:  # Ясна перевага (4-1, 5-0)
                 confidence_base += 0.05
             elif vote_diff == 2:  # Помірна перевага (3-1)
                 confidence_base += 0.02
-    
+            
         else:
             direction = 'neutral'
             confidence_base = 0.25  # Низька впевненість для слабких сигналів
-
-# ОБМЕЖЕННЯ
+        
+        # Якщо confidence < 55% і голоси рівні → NEUTRAL
+        if confidence_base < 0.55 and abs(long_votes - short_votes) <= 1:
+            direction = 'neutral'
+            confidence_base = max(0.25, confidence_base * 0.7)
+        
+        # ОБМЕЖЕННЯ
         if direction == 'neutral':
             confidence_base = min(0.45, confidence_base)  # Neutral не більше 45%
         else:
             confidence_base = min(0.90, confidence_base)  # Максимум 90%
         
-        # 4. СИЛА СИГНАЛУ
+        # СИЛА СИГНАЛУ
         strength = 'strong' if confirmation_ratio >= 0.8 else \
-                   'medium' if confirmation_ratio >= 0.6 else 'weak'
+                   'medium' if confirmation_ratio >= 0.65 else 'weak'
         
-        # 5. РОЗРАХУНОК TP/SL на основі ATR та індикаторів
+        # АДАПТИВНИЙ Risk/Reward та TP/SL
         atr = indicators['atr'][-1] if len(indicators['atr']) > 0 else current_price * 0.02
         
         if direction == 'long':
-            # Агресивніший TP для сильних сигналів
-            tp_multiplier = 4 if strength == 'strong' else 3 if strength == 'medium' else 2
-            sl_multiplier = 1.5 if strength == 'strong' else 1.2 if strength == 'medium' else 1
+            # АДАПТИВНИЙ TP/SL залежно від впевненості
+            if confidence_base >= 0.85:
+                tp_multiplier = 4.0
+                sl_multiplier = 1.33
+            elif confidence_base >= 0.75:
+                tp_multiplier = 3.5
+                sl_multiplier = 1.4
+            elif confidence_base >= 0.65:
+                tp_multiplier = 3.0
+                sl_multiplier = 1.5
+            else:
+                tp_multiplier = 2.5
+                sl_multiplier = 1.67
             
             take_profit = current_price + (atr * tp_multiplier)
             stop_loss = current_price - (atr * sl_multiplier)
             
         elif direction == 'short':
-            tp_multiplier = 4 if strength == 'strong' else 3 if strength == 'medium' else 2
-            sl_multiplier = 1.5 if strength == 'strong' else 1.2 if strength == 'medium' else 1
+            if confidence_base >= 0.85:
+                tp_multiplier = 4.0
+                sl_multiplier = 1.33
+            elif confidence_base >= 0.75:
+                tp_multiplier = 3.5
+                sl_multiplier = 1.4
+            elif confidence_base >= 0.65:
+                tp_multiplier = 3.0
+                sl_multiplier = 1.5
+            else:
+                tp_multiplier = 2.5
+                sl_multiplier = 1.67
             
             take_profit = current_price - (atr * tp_multiplier)
             stop_loss = current_price + (atr * sl_multiplier)
         else:
             take_profit = current_price
             stop_loss = current_price
-            confidence_base = confidence_base * 0.6  # Додатково знижуємо для neutral
         
-        # 6. ФАКТОРИ ДЛЯ ПОЯСНЕННЯ
+        # ФАКТОРИ ДЛЯ ПОЯСНЕННЯ
         factors = {
             "trend_score": round(signal_scores['trend']['score'], 2),
             "momentum_score": round(signal_scores['momentum']['score'], 2),
@@ -312,6 +362,8 @@ class AIAnalyzer:
             "vwap_position": "above" if current_price > indicators['vwap'][-1] else "below",
             "ichimoku_signal": indicators['ichimoku'].get('cloud_color', 'neutral'),
             "obv_trend": "bullish" if indicators['obv'][-1] > indicators['obv'][-5] else "bearish",
+            "williams_r": round(indicators['williams_r'][-1] if len(indicators['williams_r']) > 0 else -50, 1),
+            "cci_level": round(indicators['cci'][-1] if len(indicators['cci']) > 0 else 0, 1),
         }
         
         return {
@@ -328,7 +380,7 @@ class AIAnalyzer:
     # ===== АНАЛІТИЧНІ МЕТОДИ КАТЕГОРІЙ =====
     
     def _analyze_trend_indicators(self, indicators: Dict) -> Dict:
-        """Аналіз трендових індикаторів (SMA, EMA, Ichimoku)"""
+        """Аналіз трендових індикаторів"""
         score = 0.5
         direction = 'neutral'
         current_price = indicators['current_price']
@@ -363,7 +415,7 @@ class AIAnalyzer:
         return {'direction': direction, 'score': score}
     
     def _analyze_momentum_indicators(self, indicators: Dict) -> Dict:
-        """Аналіз індикаторів моментуму (RSI, MACD, Stochastic, Williams)"""
+        """Аналіз індикаторів моментуму"""
         score = 0.5
         direction = 'neutral'
         
@@ -412,7 +464,7 @@ class AIAnalyzer:
         return {'direction': direction, 'score': score}
     
     def _analyze_volume_indicators(self, indicators: Dict) -> Dict:
-        """Аналіз об'ємних індикаторів (OBV, ADL, Volume Ratio)"""
+        """Аналіз об'ємних індикаторів"""
         score = 0.5
         direction = 'neutral'
         
@@ -428,10 +480,10 @@ class AIAnalyzer:
         # OBV тренд
         obv = indicators.get('obv', [0])
         if len(obv) >= 5:
-            if obv[-1] > obv[-5]:  # Зростання OBV
+            if obv[-1] > obv[-5]:
                 score = max(score, 0.7)
                 direction = 'long' if direction == 'neutral' else direction
-            elif obv[-1] < obv[-5]:  # Падіння OBV
+            elif obv[-1] < obv[-5]:
                 score = max(score, 0.7)
                 direction = 'short' if direction == 'neutral' else direction
         
@@ -449,7 +501,7 @@ class AIAnalyzer:
         return {'direction': direction, 'score': score}
     
     def _analyze_volatility_indicators(self, indicators: Dict) -> Dict:
-        """Аналіз волатильності (ATR, Bollinger Bands)"""
+        """Аналіз волатильності"""
         score = 0.5
         direction = 'neutral'
         current_price = indicators['current_price']
@@ -461,10 +513,10 @@ class AIAnalyzer:
         
         if current_price <= bb_lower:
             score = 0.9
-            direction = 'long'  # Перепроданість
+            direction = 'long'
         elif current_price >= bb_upper:
             score = 0.9
-            direction = 'short'  # Перекупленість
+            direction = 'short'
         elif current_price > bb_middle:
             score = 0.6
             direction = 'long'
@@ -472,23 +524,23 @@ class AIAnalyzer:
             score = 0.6
             direction = 'short'
         
-        # ATR (оптимальна волатильність для торгівлі)
+        # ATR (оптимальна волатильність)
         atr = indicators['atr'][-1] if len(indicators['atr']) > 0 else 0
         atr_percent = (atr / current_price) * 100 if current_price > 0 else 0
         
-        if 0.5 < atr_percent < 3:  # Оптимальна волатильність
+        if 0.5 < atr_percent < 3:
             score = max(score, 0.8)
-        elif atr_percent > 5:  # Занадто висока волатильність
-            score = score * 0.7  # Знижуємо впевненість
+        elif atr_percent > 5:
+            score = score * 0.7
         
         return {'direction': direction, 'score': score}
     
     def _analyze_market_structure(self, indicators: Dict) -> Dict:
-        """Аналіз структури ринку (CCI, ціна відносно VWAP)"""
+        """Аналіз структури ринку"""
         score = 0.5
         direction = 'neutral'
         
-        # CCI (Commodity Channel Index)
+        # CCI
         cci = indicators['cci'][-1] if len(indicators['cci']) > 0 else 0
         if cci > 100:
             score = 0.8
@@ -506,9 +558,9 @@ class AIAnalyzer:
         return {'direction': direction, 'score': score}
     
     # ===== РОЗРАХУНОК РИЗИК-ПРИБУТОК =====
-
+    
     def _calculate_risk_reward(self, signal_analysis: Dict, entry_price: float) -> Dict:
-        """Розрахунок співвідношення ризик/прибуток та очікуваного PnL"""
+        """ПРАВИЛЬНИЙ розрахунок Risk/Reward та PnL"""
         if signal_analysis['direction'] == 'neutral':
             return {'ratio': 1.0, 'expected_pnl': 0, 'profit_pips': 0, 'risk_pips': 0}
         
@@ -516,65 +568,94 @@ class AIAnalyzer:
         sl = signal_analysis['stop_loss']
         confidence = signal_analysis['confidence']
         
+        # ПЕРЕВІРКА на помилкові значення
         if entry_price == 0 or tp == entry_price or sl == entry_price:
             return {'ratio': 1.0, 'expected_pnl': 0, 'profit_pips': 0, 'risk_pips': 0}
         
+        # ПРАВИЛЬНІ РОЗРАХУНКИ:
         if signal_analysis['direction'] == 'long':
-            profit = tp - entry_price  # позитивне, якщо TP > entry
-            risk = entry_price - sl    # позитивне, якщо SL < entry
+            profit = tp - entry_price
+            risk = entry_price - sl
+            
+            # Перевірка на позитивні значення
             if profit <= 0 or risk <= 0:
                 return {'ratio': 1.0, 'expected_pnl': 0, 'profit_pips': 0, 'risk_pips': 0}
-        else:
-            profit = entry_price - tp  # позитивне, якщо TP < entry
-            risk = sl - entry_price    # позитивне, якщо SL > entry
+                
+        else:  # SHORT
+            profit = entry_price - tp
+            risk = sl - entry_price
+            
+            # Перевірка на позитивні значення
             if profit <= 0 or risk <= 0:
                 return {'ratio': 1.0, 'expected_pnl': 0, 'profit_pips': 0, 'risk_pips': 0}
+        
         # Розрахунок Risk/Reward
         rr_ratio = profit / risk
-        # Очікуваний PnL з урахуванням впевненості
-        # win_rate приймаємо 55% для AI сигналів
-        win_rate = 0.55
+        
+        # Очікуваний PnL
+        win_rate = 0.55  # Припущення
         expected_pnl_per_trade = (profit * win_rate * confidence) - (risk * (1 - win_rate) * (1 - confidence))
         expected_pnl_percent = (expected_pnl_per_trade / entry_price) * 100
-
+        
         return {
             'ratio': rr_ratio,
             'expected_pnl': expected_pnl_percent,
             'profit_pips': profit,
             'risk_pips': risk,
             'win_rate': win_rate
-      }
+        }
     
     def _calculate_position_size(self, indicators: Dict, signal_analysis: Dict) -> Dict:
-        """Розрахунок розміру позиції на основі ризику"""
+        """ПРОФЕСІЙНИЙ розрахунок розміру позиції"""
         atr = indicators['atr'][-1] if len(indicators['atr']) > 0 else 0
         current_price = indicators['current_price']
         confidence = signal_analysis['confidence']
+        strength = signal_analysis.get('strength', 'medium')
         
         if signal_analysis['direction'] == 'neutral' or atr == 0:
-            return {'size_percent': 0, 'risk_per_trade': 0}
+            return {'size_percent': 0, 'risk_per_trade': 0, 'reason': 'neutral_or_no_atr'}
         
-        # Базований на Kelly Criterion
-        win_rate = 0.55  # Припущення
-        risk_per_trade = 0.02  # 2% на угоду
+        # БАЗОВИЙ РИЗИК залежно від сили сигналу
+        base_risk = {
+            'strong': 0.025,   # 2.5%
+            'medium': 0.015,   # 1.5%
+            'weak': 0.01       # 1.0%
+        }.get(strength, 0.01)
         
-        # Корекція на впевненість
-        adjusted_risk = risk_per_trade * confidence
+        # КОРЕКЦІЯ на впевненість
+        adjusted_risk = base_risk * confidence
         
-        # Корекція на волатильність (ATR)
+        # КОРЕКЦІЯ на волатильність (ATR)
         atr_percent = (atr / current_price) * 100
-        if atr_percent > 3:  # Висока волатильність
-            adjusted_risk = adjusted_risk * 0.7
-        elif atr_percent < 1:  # Низька волатильність
-            adjusted_risk = adjusted_risk * 1.2
+        volatility_adjustment = 1.0
         
-        # Максимальний розмір позиції
-        max_position_size = min(adjusted_risk * 100, 10)  # Макс 10% портфеля
+        if atr_percent > 3.0:
+            volatility_adjustment = 0.6
+        elif atr_percent > 2.0:
+            volatility_adjustment = 0.8
+        elif atr_percent < 0.5:
+            volatility_adjustment = 1.3
+        elif atr_percent < 1.0:
+            volatility_adjustment = 1.2
+        
+        adjusted_risk *= volatility_adjustment
+        
+        # МАКСИМАЛЬНИЙ РОЗМІР (Kelly Criterion)
+        win_rate = 0.55
+        kelly_fraction = ((win_rate * 2.5) - (1 - win_rate)) / 2.5
+        max_kelly_size = kelly_fraction * confidence
+        
+        # ФІНАЛЬНИЙ РОЗМІР
+        final_size = min(adjusted_risk, max_kelly_size) * 100
+        final_size = max(0.5, min(10.0, final_size))
         
         return {
-            'size_percent': round(max_position_size, 2),
+            'size_percent': round(final_size, 2),
             'risk_per_trade': round(adjusted_risk * 100, 2),
-            'atr_adjustment': round(atr_percent, 2),
+            'base_risk': round(base_risk * 100, 2),
+            'volatility_adjustment': round(volatility_adjustment, 2),
+            'atr_percent': round(atr_percent, 2),
+            'max_kelly': round(max_kelly_size * 100, 2),
             'confidence_multiplier': round(confidence, 2)
         }
     
@@ -609,7 +690,7 @@ class AIAnalyzer:
         else:
             return 'lower_half'
     
-    # ===== БАЗОВІ МЕТОДИ ІНДИКАТОРІВ (залишаються) =====
+    # ===== БАЗОВІ МЕТОДИ ІНДИКАТОРІВ =====
     
     def _calculate_sma(self, prices: np.ndarray, period: int) -> np.ndarray:
         return pd.Series(prices).rolling(window=period).mean().values
@@ -651,7 +732,7 @@ class AIAnalyzer:
     def _get_fallback_signal(self, symbol: str) -> Dict:
         return {
             "direction": "neutral",
-            "confidence": 0.1,
+            "confidence": 0.05,
             "factors": {"error": "insufficient_data"},
             "entry_price": 0,
             "take_profit": 0,
@@ -660,7 +741,8 @@ class AIAnalyzer:
             "expected_pnl_percent": 0,
             "position_size": {"size_percent": 0, "risk_per_trade": 0},
             "symbol": symbol,
-            "signal_strength": "weak"
+            "signal_strength": "weak",
+            "error": True
         }
 
 
