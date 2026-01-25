@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Float, JSON, DateTime, Boolean, Text
 from sqlalchemy.sql import func
 from app.database import Base
+from sqlalchemy.orm import relationship
 
 class Signal(Base):
     """Модель для AI-сигналів ф'ючерсів"""
@@ -29,6 +30,9 @@ class Signal(Base):
     is_active = Column(Boolean, default=True)
     source = Column(String, default="ai_v1")  # ai_v1, manual, etc
     
+    # Додаємо зв'язок з VirtualTrade
+    virtual_trades = relationship("VirtualTrade", back_populates="signal", cascade="all, delete-orphan")
+
     def __repr__(self):
         return f"<FutureSignal {self.symbol} {self.direction} ({self.confidence:.2f})>"
     

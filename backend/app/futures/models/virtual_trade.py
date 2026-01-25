@@ -1,77 +1,69 @@
+# backend/app/futures/models/virtual_trade.py
+from datetime import datetime
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 from app.database import Base
 
 class VirtualTrade(Base):
-    """Модель для віртуальних тестових угод"""
     __tablename__ = "virtual_trades"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, nullable=True)  # Просто поле без FK
-    signal_id = Column(Integer, ForeignKey("futures_signals.id"))
     
-    # Цінові рівні
+    # ForeignKey до сигналу (важливо!)
+    signal_id = Column(Integer, ForeignKey("futures_signals.id"), nullable=False)
+    
+    # Для user_id (тимчасово, поки немає users таблиці)
+    user_id = Column(Integer, default=1)
+    
+    # Торгові параметри
+    symbol = Column(String, nullable=False)
+    direction = Column(String, nullable=False)  # long/short
     entry_price = Column(Float, nullable=False)
-    current_price = Column(Float)
-    take_profit = Column(Float)
-    stop_loss = Column(Float)
+    take_profit = Column(Float, nullable=False)
+    stop_loss = Column(Float, nullable=False)
+    current_price = Column(Float, nullable=False)
     
-    # Статус та результати
-    status = Column(String, default="active")  # active, tp_hit, sl_hit, cancelled, expired
+    # Статус та PnL
+    status = Column(String, default="active")  # active/tp_hit/sl_hit/closed
     pnl_percentage = Column(Float, default=0.0)
     pnl_amount = Column(Float, default=0.0)
     
-    # Час
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    closed_at = Column(DateTime(timezone=True))
+    # Таймстампи
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    closed_at = Column(DateTime, nullable=True)
     
-    # Зв'язки
-    signal = relationship("Signal")
+    # Відносини
+    signal = relationship("Signal", back_populates="virtual_trades")
     
-    def __repr__(self):
-        return f"<VirtualTrade {self.id}: {self.status} PnL: {self.pnl_percentage:.2f}%>"
-    
-    def calculate_pnl(self, current_price: float = None) -> float:
-        """
-        Розрахунок PnL на основі поточної ціни
+    def calculate_pnl(self, current_price: float):
+        """Розрахунок PnL на основі поточної ціни"""
+        self.current_price = current_price
         
-        Args:
-            current_price: Поточна ціна (якщо None - використовуємо збережену)
-            
-        Returns:
-            PnL у відсотках
-        """
-        if current_price is not None:
-            self.current_price = current_price
+        if self.direction == "long":
+            self.pnl_percentage = ((current_price - self.entry_price) / self.entry_price) * 100
+        else:  # short
+            self.pnl_percentage = ((self.entry_price - current_price) / self.entry_price) * 100
         
-        if not self.current_price:
-            return 0.0
-        
-        # Для long: (current - entry) / entry
-        # Для short: (entry - current) / entry
-        price_diff = self.current_price - self.entry_price
-        self.pnl_percentage = (price_diff / self.entry_price) * 100
-        
-        # Припустимий розмір позиції (тимчасово фіксований)
-        position_size = 1000  # $1000 для тесту
-        self.pnl_amount = position_size * (self.pnl_percentage / 100)
-        
-        # Перевіряємо TP/SL
-        if self.pnl_percentage >= ((self.take_profit - self.entry_price) / self.entry_price * 100):
-            self.status = "tp_hit"
-        elif self.pnl_percentage <= ((self.stop_loss - self.entry_price) / self.entry_price * 100):
-            self.status = "sl_hit"
+        # Перевірка TP/SL
+        if self.direction == "long":
+            if current_price >= self.take_profit:
+                self.status = "tp_hit"
+            elif current_price <= self.stop_loss:
+                self.status = "sl_hit"
+        else:  # short
+            if current_price <= self.take_profit:
+                self.status = "tp_hit"
+            elif current_price >= self.stop_loss:
+                self.status = "sl_hit"
         
         return self.pnl_percentage
     
     def to_dict(self):
-        """Серіалізація для API"""
         return {
             "id": self.id,
-            "signal_id": self.signal_id,
-            "user_id": self.user_id,
+            "symbol": self.symbol,
+            "direction": self.direction,
             "entry_price": self.entry_price,
             "current_price": self.current_price,
             "take_profit": self.take_profit,
@@ -80,6 +72,6 @@ class VirtualTrade(Base):
             "pnl_percentage": round(self.pnl_percentage, 2),
             "pnl_amount": round(self.pnl_amount, 2),
             "created_at": self.created_at.isoformat() if self.created_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "closed_at": self.closed_at.isoformat() if self.closed_at else None
+            "closed_at": self.closed_at.isoformat() if self.closed_at else None,
+            "signal_id": self.signal_id
         }
