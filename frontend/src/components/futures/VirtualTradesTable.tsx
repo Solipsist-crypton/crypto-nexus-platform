@@ -67,9 +67,7 @@ const VirtualTradesTable: React.FC<VirtualTradesTableProps> = ({ trades }) => {
     <div>
       {/* Заголовок та фільтри */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-        <h3 className="text-lg font-bold flex items-center">
-          <span className="mr-2">📋</span> Мої Віртуальні Угоди
-        </h3>
+        
         
         <div className="flex flex-wrap gap-2">
           <button
