@@ -267,9 +267,16 @@ def create_virtual_trade(
             print(f"❌ Signal {signal_id} not found")
             raise HTTPException(status_code=404, detail="Signal not found")
         
+        # ДОДАНО: Отримуємо symbol та direction з сигналу
+        if not signal.symbol:
+            raise HTTPException(status_code=400, detail="Signal has no symbol")
+        
         # Створюємо віртуальну угоду
         virtual_trade = VirtualTrade(
             signal_id=signal_id,
+            user_id=1,  # ДОДАНО: Потрібен user_id
+            symbol=signal.symbol,  # ДОДАНО: Беремо з сигналу
+            direction=signal.direction if hasattr(signal, 'direction') else 'long',  # ДОДАНО
             entry_price=entry_price,
             take_profit=take_profit,
             stop_loss=stop_loss,
@@ -296,7 +303,6 @@ def create_virtual_trade(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
 
 @router.get("/virtual-trades", response_model=dict)
 def get_virtual_trades(
