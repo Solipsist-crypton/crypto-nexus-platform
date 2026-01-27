@@ -45,6 +45,9 @@ def test_endpoint():
     }
 
 
+# ========== СТАТИЧНІ МАРШРУТИ (без змінних) ==========
+# Ці маршрути мають бути ПЕРШИМИ!
+
 @router.post("/signals/generate")
 def generate_signal(
     symbol: str = "BTC/USDT:USDT",
@@ -176,23 +179,6 @@ def get_signals(
     }
 
 
-@router.get("/signals/{signal_id}")
-def get_signal(
-    signal_id: int,
-    db: Session = Depends(get_db)
-):
-    """Отримати деталі конкретного сигналу"""
-    signal = db.query(Signal).filter(Signal.id == signal_id).first()
-    
-    if not signal:
-        raise HTTPException(status_code=404, detail="Signal not found")
-    
-    return {
-        "status": "success",
-        "signal": signal.to_dict()
-    }
-
-
 @router.get("/explain")
 def explain_signal(
     symbol: str = "BTC/USDT:USDT",
@@ -262,7 +248,7 @@ def get_market_data(
         raise HTTPException(status_code=400, detail=f"Failed to fetch market data: {str(e)}")
 
 
-# ВІРТУАЛЬНІ УГОДИ API
+# ========== ВІРТУАЛЬНІ УГОДИ API (статичні маршрути) ==========
 
 @router.post("/virtual-trades", response_model=dict)
 def create_virtual_trade(
@@ -272,41 +258,44 @@ def create_virtual_trade(
     stop_loss: float,
     db: Session = Depends(get_db)
 ):
-    """
-    Створити віртуальну угоду для тестування сигналу
-    
-    Args:
-        signal_id: ID сигналу з БД
-        entry_price: Ціна входу
-        take_profit: Ціна take profit
-        stop_loss: Ціна stop loss
-    """
-    # Перевіряємо чи існує сигнал
-    signal = db.query(Signal).filter(Signal.id == signal_id).first()
-    if not signal:
-        raise HTTPException(status_code=404, detail="Signal not found")
-    
-    # Створюємо віртуальну угоду
-    virtual_trade = VirtualTrade(
-        signal_id=signal_id,
-        entry_price=entry_price,
-        take_profit=take_profit,
-        stop_loss=stop_loss,
-        current_price=entry_price,  # Початкова ціна = ціна входу
-        status="active",
-        pnl_percentage=0.0,
-        pnl_amount=0.0
-    )
-    
-    db.add(virtual_trade)
-    db.commit()
-    db.refresh(virtual_trade)
-    
-    return {
-        "status": "success",
-        "message": "Virtual trade created",
-        "trade": virtual_trade.to_dict()
-    }
+    try:
+        print(f"🎯 Creating virtual trade: signal_id={signal_id}, entry={entry_price}")
+        
+        # Перевіряємо чи існує сигнал
+        signal = db.query(Signal).filter(Signal.id == signal_id).first()
+        if not signal:
+            print(f"❌ Signal {signal_id} not found")
+            raise HTTPException(status_code=404, detail="Signal not found")
+        
+        # Створюємо віртуальну угоду
+        virtual_trade = VirtualTrade(
+            signal_id=signal_id,
+            entry_price=entry_price,
+            take_profit=take_profit,
+            stop_loss=stop_loss,
+            current_price=entry_price,
+            status="active",
+            pnl_percentage=0.0,
+            pnl_amount=0.0
+        )
+        
+        db.add(virtual_trade)
+        db.commit()
+        db.refresh(virtual_trade)
+        
+        print(f"✅ Trade created: {virtual_trade.id}")
+        
+        return {
+            "status": "success",
+            "message": "Virtual trade created",
+            "trade": virtual_trade.to_dict()
+        }
+        
+    except Exception as e:
+        print(f"🔥 Error creating trade: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @router.get("/virtual-trades", response_model=dict)
@@ -407,6 +396,50 @@ def get_trade_statistics(db: Session = Depends(get_db)):
             "error": str(e)[:100]
         }
 
+
+# ========== ДИНАМІЧНІ МАРШРУТИ (зі змінними) ==========
+# Ці маршрути мають бути ПОСЛІДНІМИ!
+
+@router.get("/signals/{signal_id}")
+def get_signal(
+    signal_id: int,
+    db: Session = Depends(get_db)
+):
+    """Отримати деталі конкретного сигналу"""
+    signal = db.query(Signal).filter(Signal.id == signal_id).first()
+    
+    if not signal:
+        raise HTTPException(status_code=404, detail="Signal not found")
+    
+    return {
+        "status": "success",
+        "signal": signal.to_dict()
+    }
+
+
+@router.get("/signals/{signal_id}/virtual-trades")
+def get_signal_virtual_trades(
+    signal_id: int,
+    db: Session = Depends(get_db)
+):
+    """Отримати всі віртуальні угоди для конкретного сигналу"""
+    signal = db.query(Signal).filter(Signal.id == signal_id).first()
+    
+    if not signal:
+        raise HTTPException(status_code=404, detail="Signal not found")
+    
+    trades = db.query(VirtualTrade).filter(
+        VirtualTrade.signal_id == signal_id
+    ).order_by(VirtualTrade.created_at.desc()).all()
+    
+    return {
+        "status": "success",
+        "signal": signal.to_dict(),
+        "count": len(trades),
+        "trades": [trade.to_dict() for trade in trades]
+    }
+
+
 @router.get("/virtual-trades/{trade_id}", response_model=dict)
 def get_virtual_trade(
     trade_id: int,
@@ -482,27 +515,3 @@ def delete_virtual_trade(
         "status": "success",
         "message": "Virtual trade deleted"
     }
-
-
-@router.get("/signals/{signal_id}/virtual-trades")
-def get_signal_virtual_trades(
-    signal_id: int,
-    db: Session = Depends(get_db)
-):
-    """Отримати всі віртуальні угоди для конкретного сигналу"""
-    signal = db.query(Signal).filter(Signal.id == signal_id).first()
-    
-    if not signal:
-        raise HTTPException(status_code=404, detail="Signal not found")
-    
-    trades = db.query(VirtualTrade).filter(
-        VirtualTrade.signal_id == signal_id
-    ).order_by(VirtualTrade.created_at.desc()).all()
-    
-    return {
-        "status": "success",
-        "signal": signal.to_dict(),
-        "count": len(trades),
-        "trades": [trade.to_dict() for trade in trades]
-    }
-

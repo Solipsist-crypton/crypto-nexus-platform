@@ -1,15 +1,15 @@
 // frontend/src/services/futuresApi.ts
 const API_BASE = 'http://localhost:5000/api/futures';
-const HISTORY_API_BASE = 'http://localhost:5000/api/history';
+
 
 // Генерація AI-сигналу
 export const generateSignal = async (symbol: string): Promise<any> => {
   try {
-    // ВАЖЛИВО: Це POST запит чи GET? Зараз це POST
+    // ДОДАЄМО method: 'POST' та headers
     const response = await fetch(
-      `${API_BASE}/signals/generate?symbol=${encodeURIComponent(symbol)}`,
+      `${API_BASE}/signals/generate?symbol=${encodeURIComponent(symbol)}&timeframe=1h`,
       {
-        method: 'POST', // ← перевір чи це дійсно POST
+        method: 'POST', // ← ЦЕ ГОЛОВНЕ!
         headers: {
           'Content-Type': 'application/json',
         },
@@ -24,36 +24,52 @@ export const generateSignal = async (symbol: string): Promise<any> => {
     return await response.json();
   } catch (error) {
     console.error('Помилка генерації сигналу:', error);
-    // Не кидаємо помилку далі - показуємо користувачеві
     throw new Error('Не вдалося згенерувати сигнал. Спробуйте ще раз.');
   }
 };
 
 // Створення віртуальної угоди
-export const createVirtualTrade = async (signalId: number): Promise<any> => {
+export const createVirtualTrade = async (
+  signalId: number,
+  entryPrice: number,
+  takeProfit: number,
+  stopLoss: number
+): Promise<any> => {
   try {
-    const response = await fetch(
-      `${API_BASE}/entry-points/enter/${signalId}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+    // Використовуємо query параметри в URL
+    const url = `${API_BASE}/virtual-trades?signal_id=${signalId}&entry_price=${entryPrice}&take_profit=${takeProfit}&stop_loss=${stopLoss}`;
+    
+    console.log('🚀 POST with query params:', url);
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
 
+    console.log('📡 Response status:', response.status);
+    
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.detail || `Помилка: ${response.status}`);
+      const errorText = await response.text();
+      console.error('❌ Error response:', errorText);
+      
+      // Спробуємо парсити JSON помилки
+      try {
+        const errorJson = JSON.parse(errorText);
+        throw new Error(errorJson.detail || errorText);
+      } catch {
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+      }
     }
 
     return await response.json();
+    
   } catch (error) {
-    console.error('Помилка створення угоди:', error);
-    throw new Error('Не вдалося створити угоду. Перевірте з\'єднання.');
+    console.error('🔥 Помилка створення угоди:', error);
+    throw error;
   }
 };
-
 // Отримання списку угод
 export const fetchTrades = async (): Promise<any> => {
   try {
@@ -108,11 +124,12 @@ export const fetchStats = async (): Promise<any> => {
 // === НОВІ ФУНКЦІЇ ДЛЯ ГРАФІКІВ ===
 
 // Отримати історичні дані для угоди
+// Отримати історичні дані для угоди - ВИПРАВЛЕНО: використовуємо API_BASE
 export const fetchTradeHistory = async (tradeId: number, interval: string = '1h', limit: number = 24): Promise<any> => {
   try {
     const response = await fetch(
-      `${HISTORY_API_BASE}/trade/${tradeId}?interval=${interval}&limit=${limit}`,
-      // ↑↑↑ ВИПРАВЛЕНО: Використовуємо HISTORY_API_BASE
+      `${API_BASE}/history/data/${tradeId}?interval=${interval}&limit=${limit}`,
+      // ↑↑↑ ВИПРАВЛЕНО: Використовуємо API_BASE, а не HISTORY_API_BASE
       {
         method: 'GET',
         headers: {
@@ -122,7 +139,6 @@ export const fetchTradeHistory = async (tradeId: number, interval: string = '1h'
     );
 
     if (!response.ok) {
-      // Якщо 404 - значить роутер не підключений або інтернету немає
       console.warn(`API history повернуло ${response.status} для trade ${tradeId}`);
       return null;
     }
@@ -130,9 +146,10 @@ export const fetchTradeHistory = async (tradeId: number, interval: string = '1h'
     return await response.json();
   } catch (error) {
     console.error('Помилка завантаження історії:', error);
-    return null; // Для активації симуляції
+    return null;
   }
 };
+
 
 // Отримати реальні дані з біржі (опційно)
 export const fetchMarketData = async (symbol: string, interval: string = '1h', limit: number = 24): Promise<any> => {

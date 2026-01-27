@@ -1,4 +1,3 @@
-# backend/app/futures/api/history.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
@@ -10,7 +9,7 @@ import random
 from app.database import get_db
 from app.futures.models import VirtualTrade
 
-router = APIRouter(prefix="/history", tags=["history"])
+router = APIRouter(prefix="", tags=["history"])  # Без префіксу
 logger = logging.getLogger(__name__)
 
 class BinanceHistoryClient:
@@ -68,7 +67,8 @@ class BinanceHistoryClient:
             })
         return formatted
 
-@router.get("/trade/{trade_id}")
+# ЗМІНА ТУТ: замінив "/trade/{trade_id}" на "/data/{trade_id}"
+@router.get("/data/{trade_id}")
 async def get_trade_history(
     trade_id: int,
     interval: str = "1h",
@@ -160,6 +160,3 @@ def generate_fallback_history(trade, interval, limit):
         })
     
     return history
-
-# Додайте цей роутер до головного app.py
-# app.include_router(history_router, prefix="/api/futures")

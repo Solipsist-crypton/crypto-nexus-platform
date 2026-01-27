@@ -1,12 +1,14 @@
 // frontend/src/pages/Futures.tsx
 import React, { useState, useEffect } from 'react';
 import CoinList from '../components/futures/CoinList';
+import SignalDisplay from '../components/futures/SignalDisplay';
 import VirtualTradesTable from '../components/futures/VirtualTradesTable';
 import StatsCards from '../components/futures/StatsCards';
-import { generateSignal, createVirtualTrade, fetchTrades, fetchStats } from '../services/futuresApi';
+import { generateSignal, createVirtualTrade, fetchTrades, fetchStats, fetchTradeHistory } from '../services/futuresApi';
 
 const FuturesPage: React.FC = () => {
   const [activeSignal, setActiveSignal] = useState<any>(null);
+  const [tradeHistory, setTradeHistory] = useState<any>(null);
   const [trades, setTrades] = useState<any[]>([]);
   const [stats, setStats] = useState<any>({});
   const [loading, setLoading] = useState(false);
@@ -35,6 +37,7 @@ const FuturesPage: React.FC = () => {
   const handleAnalyze = async (symbol: string) => {
     setAnalyzing(true);
     setActiveSignal(null);
+    setTradeHistory(null);
     
     try {
       const data = await generateSignal(symbol);
@@ -42,6 +45,17 @@ const FuturesPage: React.FC = () => {
       if (data.status === 'success') {
         setActiveSignal(data.signal);
         console.log('✅ Сигнал згенеровано:', data.signal);
+        
+        // Якщо є активні угоди для цього символу, завантажити історію
+        const activeTrade = trades.find(t => 
+          t.symbol === symbol && t.status === 'active'
+        );
+        if (activeTrade) {
+          const history = await fetchTradeHistory(activeTrade.id);
+          if (history) {
+            setTradeHistory(history);
+          }
+        }
       } else {
         alert(`❌ Помилка: ${data.error || 'Невідома помилка'}`);
       }
@@ -53,14 +67,26 @@ const FuturesPage: React.FC = () => {
     }
   };
 
-  const handleTrack = async (signalId: number) => {
+  const handleTrack = async () => {
     setLoading(true);
     try {
-      const result = await createVirtualTrade(signalId);
+      if (!activeSignal) {
+        alert('❌ Немає активного сигналу!');
+        return;
+      }
+      
+      console.log('🎯 Tracking signal:', activeSignal);
+      
+      const result = await createVirtualTrade(
+        activeSignal.id,
+        activeSignal.entry_price,
+        activeSignal.take_profit,
+        activeSignal.stop_loss
+      );
       
       if (result.status === 'success') {
         alert('✅ Віртуальну угоду створено!');
-        await loadData(); // Оновлюємо дані
+        await loadData();
       } else {
         alert(`❌ Помилка: ${result.detail || 'Не вдалося створити угоду'}`);
       }
@@ -105,15 +131,29 @@ const FuturesPage: React.FC = () => {
               <h2 className="text-xl font-bold mb-4 flex items-center">
                 <span className="text-purple-400 mr-2">🤖</span> AI Сигнал
               </h2>
+              <SignalDisplay 
+                signal={activeSignal}
+                onTrack={handleTrack}
+                loading={loading}
+                analyzing={analyzing}
+              />
             </div>
           </div>
         </div>
 
         {/* Таблица угод */}
         <div className="bg-gray-800 rounded-xl p-5 shadow-lg">
-          <h2 className="text-xl font-bold mb-4 flex items-center">
-            <span className="text-orange-400 mr-2">📋</span> Мої Віртуальні Угоди
-          </h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold flex items-center">
+              <span className="text-orange-400 mr-2">📋</span> Мої Віртуальні Угоди
+            </h2>
+            <button 
+              onClick={loadData}
+              className="text-sm bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition-colors"
+            >
+              Оновити
+            </button>
+          </div>
           <VirtualTradesTable trades={trades} />
         </div>
       </div>

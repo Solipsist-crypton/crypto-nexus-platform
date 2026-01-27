@@ -1,7 +1,6 @@
 from .router import router as futures_router
-from .virtual_trades import router as virtual_trades_router
 from .entry_points import router as entry_points_router
-from .history import router as history_router
+from .history import router as history_router  # Додаємо history
 
 # Включіть entry_points_router в futures_router
 futures_router.include_router(
@@ -10,4 +9,11 @@ futures_router.include_router(
     tags=["entry-points"]
 )
 
-# Тепер всі будуть доступні під /api/futures
+# Включіть history_router ОКРЕМО (без подвійного префіксу)
+futures_router.include_router(
+    history_router,
+    prefix="/history",
+    tags=["history"]
+)
+
+# virtual_trades НЕ включайте - його маршрути вже в router.py
