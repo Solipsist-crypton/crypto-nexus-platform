@@ -79,3 +79,66 @@ export const fetchStats = async (): Promise<any> => {
     };
   }
 };
+
+// === НОВІ ФУНКЦІЇ ДЛЯ ГРАФІКІВ ===
+
+// Отримати історичні дані для угоди
+export const fetchTradeHistory = async (tradeId: number, interval: string = '1h', limit: number = 24): Promise<any> => {
+  try {
+    const response = await fetch(
+      `${API_BASE}/trade/${tradeId}/history?interval=${interval}&limit=${limit}`,
+      {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || `API помилка: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Помилка завантаження історії:', error);
+    // Повертаємо пусті дані, фронтенд згенерує демо
+    return null;
+  }
+};
+
+// Отримати реальні дані з біржі
+export const fetchMarketData = async (symbol: string, interval: string = '1h', limit: number = 24): Promise<any> => {
+  try {
+    // Очищаємо символ для Binance API
+    const cleanSymbol = symbol.split(':')[0].replace('/', '');
+    
+    const response = await fetch(
+      `https://api.binance.com/api/v3/klines?symbol=${cleanSymbol}&interval=${interval}&limit=${limit}`,
+      {
+        method: 'GET',
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Binance API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    // Форматуємо відповідно до нашої структури
+    return data.map((kline: any[]) => ({
+      time: new Date(kline[0]).toISOString(),
+      open: parseFloat(kline[1]),
+      high: parseFloat(kline[2]),
+      low: parseFloat(kline[3]),
+      close: parseFloat(kline[4]),
+      volume: parseFloat(kline[5]),
+      price: parseFloat(kline[4]) // для сумісності
+    }));
+  } catch (error) {
+    console.error('Помилка завантаження даних з біржі:', error);
+    return null;
+  }
+};

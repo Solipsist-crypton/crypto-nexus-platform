@@ -1,5 +1,6 @@
 // frontend/src/components/futures/VirtualTradesTable.tsx
 import React, { useState } from 'react';
+import TradeDetailsModal from './TradeDetailsModal'; // Імпортуємо новий компонент
 
 interface Trade {
   id: number;
@@ -11,7 +12,7 @@ interface Trade {
   status: 'active' | 'tp_hit' | 'sl_hit' | 'closed';
   take_profit?: number;
   stop_loss?: number;
-  created_at?: string; // Додаємо дату створення
+  created_at?: string;
 }
 
 interface VirtualTradesTableProps {
@@ -20,6 +21,7 @@ interface VirtualTradesTableProps {
 
 const VirtualTradesTable: React.FC<VirtualTradesTableProps> = ({ trades }) => {
   const [filter, setFilter] = useState<'all' | 'active' | 'closed'>('all');
+  const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null); // Новий стан для вибраної угоди
 
   // Функція для форматування часу
   const formatTime = (dateString?: string) => {
@@ -212,6 +214,7 @@ const VirtualTradesTable: React.FC<VirtualTradesTableProps> = ({ trades }) => {
                   <th className="text-left py-3 px-4 font-medium text-gray-400 text-sm">PnL%</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-400 text-sm">Статус</th>
                   <th className="text-left py-3 px-4 font-medium text-gray-400 text-sm">Час входу</th>
+                  <th className="text-left py-3 px-4 font-medium text-gray-400 text-sm">Дії</th> {/* Нова колонка */}
                 </tr>
               </thead>
               <tbody>
@@ -260,6 +263,15 @@ const VirtualTradesTable: React.FC<VirtualTradesTableProps> = ({ trades }) => {
                         ) : (
                           <span className="text-gray-500 text-sm">-</span>
                         )}
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        {/* Нова кнопка "Деталі" */}
+                        <button
+                          onClick={() => setSelectedTrade(trade)}
+                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm font-medium transition-colors flex items-center"
+                        >
+                          <span className="mr-1">📊</span> Графік
+                        </button>
                       </td>
                     </tr>
                   );
@@ -310,6 +322,15 @@ const VirtualTradesTable: React.FC<VirtualTradesTableProps> = ({ trades }) => {
           </span>
         </div>
       </div>
+      
+      {/* Модальне вікно з деталями угоди */}
+      {selectedTrade && (
+        <TradeDetailsModal
+          trade={selectedTrade}
+          isOpen={!!selectedTrade}
+          onClose={() => setSelectedTrade(null)}
+        />
+      )}
     </div>
   );
 };

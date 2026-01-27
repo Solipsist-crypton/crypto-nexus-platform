@@ -1,7 +1,6 @@
 // frontend/src/pages/Futures.tsx
 import React, { useState, useEffect } from 'react';
 import CoinList from '../components/futures/CoinList';
-import SignalDisplay from '../components/futures/SignalDisplay';
 import VirtualTradesTable from '../components/futures/VirtualTradesTable';
 import StatsCards from '../components/futures/StatsCards';
 import { generateSignal, createVirtualTrade, fetchTrades, fetchStats } from '../services/futuresApi';
@@ -106,12 +105,6 @@ const FuturesPage: React.FC = () => {
               <h2 className="text-xl font-bold mb-4 flex items-center">
                 <span className="text-purple-400 mr-2">🤖</span> AI Сигнал
               </h2>
-              <SignalDisplay 
-                signal={activeSignal}
-                onTrack={handleTrack}
-                loading={loading}
-                analyzing={analyzing}
-              />
             </div>
           </div>
         </div>

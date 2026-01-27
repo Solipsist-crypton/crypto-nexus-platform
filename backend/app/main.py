@@ -13,11 +13,13 @@ from .models import arbitrage as arbitrage_models
 from .api import arbitrage as arbitrage_api
 from .api import binance as binance_api
 from .api import kraken as kraken_api
+from app.futures.api import history
 # arbitrage_calc БІЛЬШЕ НЕ ІМПОРТУЄМО!
 from app.api.coinbase import router as coinbase_router
 from app.api.bybit import router as bybit_router
 from app.api.okx import router as okx_router
 from app.futures.api.router import router as futures_router
+
 # 1. ІМПОРТУЙ РОУТЕР (додай цей рядок):
 #from app.api.gateio import router as gateio_router  # Заміни gateio на назву біржі
 logging.basicConfig(
@@ -55,6 +57,7 @@ app.include_router(coinbase_router, prefix="/api/coinbase", tags=["coinbase"])
 app.include_router(bybit_router, prefix="/api/bybit", tags=["bybit"])
 app.include_router(okx_router, prefix="/api/okx", tags=["okx"])
 app.include_router(futures_router, prefix="/api/futures", tags=["futures"])
+app.include_router(history.router, prefix="/api/history", tags=["history"])
 app.include_router(
     entry_points_router,
     prefix="/api/futures",  # Той самий prefix що і для futures
