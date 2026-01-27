@@ -4,24 +4,20 @@ import logging
 from .celery_app import celery_app as celery_instance
 from .services.price_updater_service import start_price_updater, stop_price_updater
 
-from app.futures.api.entry_points import router as entry_points_router  # Додати
 # Імпортуємо моделі
 from .database import engine, Base
 from .models import arbitrage as arbitrage_models
 
-# Імпортуємо роутери - ТЕПЕР ТІЛЬКИ arbitrage_api
+# Імпортуємо роутери
 from .api import arbitrage as arbitrage_api
 from .api import binance as binance_api
 from .api import kraken as kraken_api
-from app.futures.api import history
-# arbitrage_calc БІЛЬШЕ НЕ ІМПОРТУЄМО!
 from app.api.coinbase import router as coinbase_router
 from app.api.bybit import router as bybit_router
 from app.api.okx import router as okx_router
 from app.futures.api.router import router as futures_router
+from app.futures.api import history  # ← для графіків
 
-# 1. ІМПОРТУЙ РОУТЕР (додай цей рядок):
-#from app.api.gateio import router as gateio_router  # Заміни gateio на назву біржі
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -48,23 +44,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Реєстрація роутерів - ТЕПЕР ТІЛЬКИ arbitrage_api
+# Реєстрація роутерів
 app.include_router(arbitrage_api.router, prefix="/api/arbitrage", tags=["arbitrage"])
 app.include_router(binance_api.router, prefix="/api/binance", tags=["binance"])
 app.include_router(kraken_api.router, prefix="/api/kraken", tags=["kraken"])
-# arbitrage_calc_api.router БІЛЬШЕ НЕ ІСНУЄ - ми його видалили
 app.include_router(coinbase_router, prefix="/api/coinbase", tags=["coinbase"])
 app.include_router(bybit_router, prefix="/api/bybit", tags=["bybit"])
 app.include_router(okx_router, prefix="/api/okx", tags=["okx"])
 app.include_router(futures_router, prefix="/api/futures", tags=["futures"])
 app.include_router(history.router, prefix="/api/history", tags=["history"])
-app.include_router(
-    entry_points_router,
-    prefix="/api/futures",  # Той самий prefix що і для futures
-    tags=["entry-points"]
-)
-# 2. ДОДАЙ РОУТЕР ДО APP (додай цей рядок):
-#app.include_router(gateio_router, prefix="/api/gateio", tags=["GateIO"])  # Заміни gateio
+
 # Створюємо таблиці в базі даних
 Base.metadata.create_all(bind=engine)
 
