@@ -1,623 +1,573 @@
 // frontend/src/components/futures/SignalDisplay.tsx
-import React, { useMemo } from 'react';
+import React, { useState } from 'react';
 
 interface SignalDisplayProps {
   signal: any;
   onTrack: () => void;
   loading: boolean;
   analyzing: boolean;
+  onTimeframeChange?: (timeframe: string) => void;
 }
 
-// Функція для перекладу ключів факторів
+// Форматування ціни
+const formatPrice = (price: number): string => {
+  if (!price && price !== 0) return '-';
+  if (price >= 1000) return price.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  if (price >= 1) return price.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  return price.toLocaleString('en-US', { maximumFractionDigits: 4 });
+};
+
+// Розрахунок відсотків
+const calculatePercentage = (entry: number, target: number): string => {
+  if (!entry || entry === 0 || !target) return '0%';
+  const change = ((target - entry) / entry) * 100;
+  const sign = change >= 0 ? '+' : '';
+  return `${sign}${Math.abs(change).toFixed(2)}%`;
+};
+
+// Розрахунок реального R/R
+const calculateRealRR = (entry: number, tp: number, sl: number): number => {
+  if (!entry || entry === 0 || !tp || !sl) return 1.0;
+  const profit = Math.abs(tp - entry);
+  const risk = Math.abs(sl - entry);
+  if (risk === 0) return 1.0;
+  return Number((profit / risk).toFixed(2));
+};
+
+// Розрахунок ймовірності
+const calculateSuccessProbability = (signal: any, realRR: number): number => {
+  if (!signal) return 50;
+  
+  const confidence = signal.confidence || 0;
+  const conflict = signal.conflict_score || 0;
+  
+  let probability = confidence * 100;
+  probability *= (1 - conflict * 0.3);
+  
+  if (realRR >= 3) probability *= 1.15;
+  else if (realRR >= 2.5) probability *= 1.1;
+  else if (realRR >= 2) probability *= 1.05;
+  
+  return Math.max(40, Math.min(90, Math.round(probability)));
+};
+
+// Переклад ключів факторів
 const translateFactorKey = (key: string): string => {
   const translations: Record<string, string> = {
+    // Тренд
     'trend_score': 'Тренд',
-    'momentum_score': 'Моментум',
-    'volume_confirmation': 'Обсяги',
-    'volatility_score': 'Волатильність',
-    'structure_score': 'Структура',
-    'confirmation_ratio': 'Підтвердження',
+    'ema_alignment': 'EMA',
+    'adx_strength': 'ADX',
+    
+    // Моментум
     'rsi_level': 'RSI',
+    'macd_hist': 'MACD',
     'stoch_rsi_level': 'Stoch RSI',
-    'vwap_position': 'VWAP позиція',
-    'ichimoku_signal': 'Ішимоку',
-    'obv_trend': 'OBV тренд',
+    'cci_level': 'CCI',
     'williams_r': 'Williams %R',
-    'cci_level': 'CCI'
+    'momentum_score': 'Моментум',
+    
+    // Ризик
+    'atr_percent': 'ATR',
+    'bollinger_position': 'Bollinger',
+    'volatility_score': 'Волатильність',
+    
+    // Обсяги
+    'volume_ratio': 'Обсяги',
+    'obv_trend': 'OBV',
+    'vwap_position': 'VWAP',
+    'volume_confirmation': 'Обсяги',
+    
+    // Структура
+    'ichimoku_signal': 'Ішимоку',
+    'candle_pattern': 'Свечний паттерн',
+    'structure_score': 'Структура',
+    
+    // Додатково
+    'confirmation_ratio': 'Підтвердження',
+    'mfi_level': 'MFI'
   };
   
   return translations[key] || key.replace(/_/g, ' ');
 };
 
-// Функція для інтерпретації значень
-const interpretFactorValue = (key: string, value: any): { text: string; color: string; icon: string; score: number } => {
-  const numValue = Number(value);
+// Правильна інтерпретація значень
+const interpretValue = (key: string, value: any) => {
+  const num = Number(value);
   
-  switch (key) {
-    case 'trend_score':
-    case 'momentum_score':
-    case 'volume_confirmation':
-    case 'volatility_score':
-    case 'structure_score':
-    case 'confirmation_ratio':
-      if (numValue >= 0.8) return { text: 'Сильний', color: 'text-green-400', icon: '🟢', score: 85 };
-      if (numValue >= 0.6) return { text: 'Помірний', color: 'text-yellow-400', icon: '🟡', score: 65 };
-      return { text: 'Слабкий', color: 'text-red-400', icon: '🔴', score: 30 };
-    
-    case 'rsi_level':
-      if (numValue > 70) return { text: 'Перекупленість', color: 'text-red-400', icon: '🔴', score: 40 };
-      if (numValue < 30) return { text: 'Перепроданість', color: 'text-green-400', icon: '🟢', score: 70 };
-      return { text: 'Нейтральний', color: 'text-yellow-400', icon: '🟡', score: 60 };
-    
-    case 'stoch_rsi_level':
-      if (numValue > 80) return { text: 'Перекупленість', color: 'text-red-400', icon: '🔴', score: 40 };
-      if (numValue < 20) return { text: 'Перепроданість', color: 'text-green-400', icon: '🟢', score: 70 };
-      return { text: 'Нейтральний', color: 'text-yellow-400', icon: '🟡', score: 60 };
-    
-    case 'cci_level':
-      if (numValue > 100) return { text: 'Сильний вверх', color: 'text-green-400', icon: '🟢', score: 80 };
-      if (numValue < -100) return { text: 'Сильний вниз', color: 'text-red-400', icon: '🔴', score: 20 };
-      return { text: 'Нейтральний', color: 'text-yellow-400', icon: '🟡', score: 50 };
-    
-    case 'williams_r':
-      if (numValue > -20) return { text: 'Перекупленість', color: 'text-red-400', icon: '🔴', score: 40 };
-      if (numValue < -80) return { text: 'Перепроданість', color: 'text-green-400', icon: '🟢', score: 70 };
-      return { text: 'Нейтральний', color: 'text-yellow-400', icon: '🟡', score: 60 };
-    
-    case 'vwap_position':
-      if (value === 'above') return { text: 'Вище VWAP', color: 'text-green-400', icon: '📈', score: 60 };
-      if (value === 'below') return { text: 'Нижче VWAP', color: 'text-red-400', icon: '📉', score: 50 };
-      return { text: String(value), color: 'text-gray-400', icon: '📊', score: 50 };
-    
-    case 'ichimoku_signal':
-      if (value === 'green' || value === 'зелений' || value === 'буличний') 
-        return { text: 'Буличний', color: 'text-green-400', icon: '🟢', score: 70 };
-      if (value === 'red' || value === 'червоний' || value === 'ведмежий') 
-        return { text: 'Ведмежий', color: 'text-red-400', icon: '🔴', score: 30 };
-      return { text: String(value), color: 'text-gray-400', icon: '⚫', score: 50 };
-    
-    case 'obv_trend':
-      if (value === 'bullish' || value === 'буличний') 
-        return { text: 'Буличний', color: 'text-green-400', icon: '📈', score: 70 };
-      if (value === 'bearish' || value === 'ведмежий') 
-        return { text: 'Ведмежий', color: 'text-red-400', icon: '📉', score: 30 };
-      return { text: String(value), color: 'text-gray-400', icon: '📊', score: 50 };
-    
-    default:
-      return { text: String(value), color: 'text-gray-400', icon: '📊', score: 50 };
-  }
-};
-
-// Функція для перекладу сили сигналу
-const translateSignalStrength = (strength: string): { text: string; color: string; emoji: string } => {
-  const lowerStrength = strength?.toLowerCase() || '';
-  
-  if (lowerStrength.includes('strong') || lowerStrength.includes('сильн') || lowerStrength === 'strong') {
-    return { text: 'Сильний', color: 'text-green-400', emoji: '🟢' };
-  }
-  if (lowerStrength.includes('medium') || lowerStrength.includes('помірн') || lowerStrength === 'medium') {
-    return { text: 'Помірний', color: 'text-yellow-400', emoji: '🟡' };
-  }
-  if (lowerStrength.includes('weak') || lowerStrength.includes('слабк') || lowerStrength === 'weak') {
-    return { text: 'Слабкий', color: 'text-red-400', emoji: '🔴' };
-  }
-  
-  return { text: 'Помірний', color: 'text-yellow-400', emoji: '🟡' };
-};
-
-// ПОКРАЩЕНА Функція для розрахунку реальної ймовірності успіху
-const calculateSuccessProbability = (signal: any): number => {
-  if (!signal?.factors) return 50;
-  
-  const factors = signal.factors;
-  let positiveFactors = 0;
-  let totalFactors = 0;
-  let weightedScore = 0;
-  let totalWeight = 0;
-  
-  // Більш реальні ваги (сума = 100)
-  const weights: Record<string, number> = {
-    // Основні фактори (більш важливі)
-    'trend_score': 20,
-    'momentum_score': 15,
-    'structure_score': 15,
-    
-    // Осцилятори (середня важливість)
-    'rsi_level': 10,
-    'stoch_rsi_level': 8,
-    'cci_level': 7,
-    
-    // Підтвердження
-    'volume_confirmation': 8,
-    'confirmation_ratio': 6,
-    
-    // Волатильність та інші
-    'volatility_score': 5,
-    'williams_r': 3,
-    'vwap_position': 2,
-    'ichimoku_signal': 3,
-    'obv_trend': 4,
-  };
-  
-  // Підраховуємо позитивні фактори
-  Object.entries(factors).forEach(([key, value]) => {
-    totalFactors++;
-    
-    const interpretation = interpretFactorValue(key, value);
-    const weight = weights[key] || 2;
-    
-    // Додаємо до загального скора
-    weightedScore += interpretation.score * (weight / 100);
-    totalWeight += weight;
-    
-    // Вважаємо позитивним, якщо інтерпретація зелена або жовта
-    if (interpretation.color === 'text-green-400' || interpretation.color === 'text-yellow-400') {
-      positiveFactors++;
+  if (typeof value === 'string') {
+    if (value.includes('bullish') || value === 'green') {
+      return { color: 'text-green-400', icon: '🟢' };
     }
-  });
+    if (value.includes('bearish') || value === 'red') {
+      return { color: 'text-red-400', icon: '🔴' };
+    }
+    return { color: 'text-gray-400', icon: '📊' };
+  }
   
-  // Базовий розрахунок на основі ваг
-  const weightedProbability = totalWeight > 0 ? weightedScore / totalWeight * 100 : 50;
+  // Для чисел
+  if (key.includes('_score') || key.includes('_ratio')) {
+    if (num >= 0.8) return { color: 'text-green-400', icon: '🟢' };
+    if (num >= 0.6) return { color: 'text-yellow-400', icon: '🟡' };
+    return { color: 'text-red-400', icon: '🔴' };
+  }
   
-  // Враховуємо співвідношення позитивних факторів
-  const positiveRatio = positiveFactors / totalFactors;
-  const positiveBonus = (positiveRatio - 0.5) * 20; // ±10%
+  if (key.includes('rsi_level') || key.includes('rsi')) {
+    if (num > 70) return { color: 'text-red-400', icon: '🔴' };
+    if (num < 30) return { color: 'text-green-400', icon: '🟢' };
+    return { color: 'text-yellow-400', icon: '🟡' };
+  }
   
-  // Враховуємо впевненість AI
+  if (key.includes('stoch')) {
+    if (num > 80) return { color: 'text-red-400', icon: '🔴' };
+    if (num < 20) return { color: 'text-green-400', icon: '🟢' };
+    return { color: 'text-yellow-400', icon: '🟡' };
+  }
+  
+  if (key.includes('macd_hist')) {
+    if (num > 0) return { color: 'text-green-400', icon: '📈' };
+    if (num < 0) return { color: 'text-red-400', icon: '📉' };
+    return { color: 'text-gray-400', icon: '📊' };
+  }
+  
+  if (key.includes('cci')) {
+    if (num > 100) return { color: 'text-green-400', icon: '🟢' };
+    if (num < -100) return { color: 'text-red-400', icon: '🔴' };
+    return { color: 'text-yellow-400', icon: '🟡' };
+  }
+  
+  if (key.includes('williams')) {
+    if (num > -20) return { color: 'text-red-400', icon: '🔴' };
+    if (num < -80) return { color: 'text-green-400', icon: '🟢' };
+    return { color: 'text-yellow-400', icon: '🟡' };
+  }
+  
+  if (key.includes('atr_percent')) {
+    if (num > 3) return { color: 'text-red-400', icon: '⚡' };
+    if (num > 1) return { color: 'text-yellow-400', icon: '📊' };
+    return { color: 'text-green-400', icon: '📉' };
+  }
+  
+  return { color: 'text-gray-300', icon: '📊' };
+};
+
+// Функція для розрахунку реального очікуваного прибутку
+const calculateExpectedProfit = (signal: any, realRR: number): number => {
   const confidence = signal.confidence || 0.5;
-  const confidenceBonus = (confidence - 0.5) * 30; // ±15%
+  const positionSize = signal.position_size?.size_percent || 2.0;
   
-  // Враховуємо ризик/прибуток
-  const riskReward = signal.risk_reward ? Number(signal.risk_reward) : 3.01;
-  let rrBonus = 0;
-  if (riskReward >= 3) rrBonus = 15;
-  else if (riskReward >= 2) rrBonus = 10;
-  else if (riskReward >= 1.5) rrBonus = 5;
+  // Формула: (ймовірність * прибуток - ймовірність збитку * 1) * розмір позиції
+  const winProb = confidence;
+  const lossProb = 1 - winProb;
   
-  // Обчислюємо загальну ймовірність
-  let probability = weightedProbability + positiveBonus + confidenceBonus + rrBonus;
+  const expectedValue = (winProb * realRR) - (lossProb * 1);
+  const expectedProfit = expectedValue * (positionSize / 100) * 100;
   
-  // Коригування за типом сигналу (лонг/шорт)
-  if (signal.direction === 'long') {
-    // Для лонгів додаємо невеликий бонус
-    probability += 5;
-  }
-  
-  // Обмежуємо розумними межами
-  probability = Math.max(25, Math.min(85, probability));
-  
-  // Округлюємо
-  return Math.round(probability);
-};
-
-// ПОКРАЩЕНА Функція для оцінки ризику
-const calculateRiskScore = (signal: any): { score: number; description: string } => {
-  if (!signal) return { score: 50, description: 'Середній' };
-  
-  let riskScore = 50; // Початкове значення
-  const factors = signal.factors || {};
-  
-  // Аналізуємо ризикові фактори
-  let riskFactors = 0;
-  let totalRiskFactors = 0;
-  
-  // 1. Осцилятори в екстремальних зонах
-  if (factors.rsi_level) {
-    totalRiskFactors++;
-    const rsi = Number(factors.rsi_level);
-    if (rsi > 80 || rsi < 20) {
-      riskFactors++;
-      riskScore += 20;
-    } else if (rsi > 70 || rsi < 30) {
-      riskScore += 10;
-    }
-  }
-  
-  if (factors.stoch_rsi_level) {
-    totalRiskFactors++;
-    const stoch = Number(factors.stoch_rsi_level);
-    if (stoch > 90 || stoch < 10) {
-      riskFactors++;
-      riskScore += 15;
-    } else if (stoch > 80 || stoch < 20) {
-      riskScore += 8;
-    }
-  }
-  
-  if (factors.williams_r) {
-    totalRiskFactors++;
-    const will = Number(factors.williams_r);
-    if (will > -10 || will < -90) {
-      riskFactors++;
-      riskScore += 10;
-    }
-  }
-  
-  // 2. Волатильність
-  if (factors.volatility_score) {
-    totalRiskFactors++;
-    const vol = Number(factors.volatility_score);
-    if (vol > 0.9) {
-      riskFactors++;
-      riskScore += 25; // Дуже висока волатильність
-    } else if (vol > 0.8) {
-      riskScore += 15;
-    } else if (vol < 0.2) {
-      riskScore += 10; // Дуже низька волатильність (можлива пробій)
-    }
-  }
-  
-  // 3. Підтвердження
-  if (factors.confirmation_ratio) {
-    totalRiskFactors++;
-    const conf = Number(factors.confirmation_ratio);
-    if (conf < 0.3) {
-      riskFactors++;
-      riskScore += 20; // Дуже мало підтверджень
-    } else if (conf < 0.5) {
-      riskScore += 10;
-    }
-  }
-  
-  // 4. Відсоток ризикових факторів
-  const riskFactorRatio = totalRiskFactors > 0 ? riskFactors / totalRiskFactors : 0;
-  
-  if (riskFactorRatio > 0.5) {
-    riskScore += 30;
-  } else if (riskFactorRatio > 0.3) {
-    riskScore += 15;
-  }
-  
-  // 5. Коригування за співвідношенням ризик/прибуток
-  const riskReward = signal.risk_reward ? Number(signal.risk_reward) : 3.01;
-  if (riskReward < 1.0) {
-    riskScore += 40; // Дуже погане R/R
-  } else if (riskReward < 1.5) {
-    riskScore += 25;
-  } else if (riskReward >= 2.5) {
-    riskScore -= 20; // Хороше R/R знижує ризик
-  } else if (riskReward >= 2.0) {
-    riskScore -= 10;
-  }
-  
-  // Обмежуємо та нормалізуємо
-  riskScore = Math.min(100, Math.max(0, riskScore));
-  
-  // Визначаємо опис
-  let description = 'Низький';
-  if (riskScore >= 70) description = 'Дуже високий';
-  else if (riskScore >= 60) description = 'Високий';
-  else if (riskScore >= 40) description = 'Середній';
-  else if (riskScore >= 20) description = 'Низький';
-  else description = 'Мінімальний';
-  
-  return { score: Math.round(riskScore), description };
+  return Math.max(0, Number(expectedProfit.toFixed(2)));
 };
 
 const SignalDisplay: React.FC<SignalDisplayProps> = ({ 
   signal, 
   onTrack, 
   loading,
-  analyzing 
+  analyzing,
+  onTimeframeChange
 }) => {
-  // Показуємо завантаження під час аналізу
+  const [showFactors, setShowFactors] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+
+  // Завантаження
   if (analyzing) {
     return (
       <div className="text-center py-12">
-        <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto mb-6"></div>
-        <h3 className="text-xl font-medium mb-2">AI аналізує ринок...</h3>
-        <p className="text-gray-400 max-w-md mx-auto">
-          Система обробляє ринкові дані та генерує сигнал
-        </p>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+        <h3 className="text-lg font-medium mb-1">🤖 AI аналіз...</h3>
+        <p className="text-sm text-gray-400">150+ свічок • 20+ індикаторів</p>
       </div>
     );
   }
 
-  // Якщо немає сигнала - показуємо привітання
+  // Немає сигналу
   if (!signal || signal.error) {
     return (
-      <div className="text-center py-12">
-        <div className="text-6xl mb-4">🤖</div>
-        <h3 className="text-xl font-medium mb-2">Оберіть монету для аналізу</h3>
-        <p className="text-gray-400 max-w-md mx-auto">
-          AI проаналізує ринкові дані та згенерує торговий сигнал з рекомендаціями
-        </p>
+      <div className="text-center py-10">
+        <div className="text-5xl mb-3">🎯</div>
+        <h3 className="text-lg font-medium mb-2">Професійний AI аналіз</h3>
+        <p className="text-sm text-gray-400 mb-4">Оберіть актив для генерації сигналу</p>
+        
+        {onTimeframeChange && (
+          <div className="flex justify-center gap-2">
+            {['15m', '1h', '4h', '1d'].map((tf) => (
+              <button
+                key={tf}
+                onClick={() => onTimeframeChange(tf)}
+                className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                {tf}
+              </button>
+            ))}
+          </div>
+        )}
+        
         {signal?.error && (
-          <div className="mt-4 p-3 bg-red-900/30 border border-red-800 rounded-lg max-w-md mx-auto">
-            <p className="text-red-300">{signal.message}</p>
+          <div className="mt-4 p-3 bg-red-900/20 rounded-lg max-w-md mx-auto">
+            <p className="text-red-300 text-sm">{signal.error}</p>
           </div>
         )}
       </div>
     );
   }
 
+  // --- РОЗРАХУНКИ ---
   const isLong = signal.direction === 'long';
-  const directionColor = isLong ? 'text-green-400' : 'text-red-400';
-  const directionBg = isLong ? 'bg-green-900/30' : 'bg-red-900/30';
-  const directionEmoji = isLong ? '📈 LONG' : '📉 SHORT';
+  const isNeutral = signal.direction === 'neutral';
   
-  // Розрахунок реальної статистики
-  const successProbability = useMemo(() => calculateSuccessProbability(signal), [signal]);
-  const riskData = useMemo(() => calculateRiskScore(signal), [signal]);
-  const winChance = successProbability;
-  const lossChance = 100 - successProbability;
+  const entryPrice = signal.entry_points?.optimal_entry || signal.entry_price || 0;
+  const currentPrice = signal.current_price || entryPrice || 0;
+  const takeProfit = signal.take_profit || 0;
+  const stopLoss = signal.stop_loss || 0;
   
-  // Визначаємо силу сигналу на основі ймовірності
-  const getStrengthFromProbability = (probability: number) => {
-    if (probability >= 70) return { text: 'Високий', color: 'text-green-400', emoji: '🟢' };
-    if (probability >= 60) return { text: 'Помірний', color: 'text-yellow-400', emoji: '🟡' };
-    if (probability >= 50) return { text: 'Слабкий', color: 'text-orange-400', emoji: '🟠' };
-    return { text: 'Низький', color: 'text-red-400', emoji: '🔴' };
+  // Реальні розрахунки
+  const realRR = calculateRealRR(entryPrice, takeProfit, stopLoss);
+  const confidence = Math.round((signal.confidence || 0) * 100);
+  const successProb = calculateSuccessProbability(signal, realRR);
+  const lossProb = 100 - successProb;
+  const expectedProfit = calculateExpectedProfit(signal, realRR);
+  
+  const positionSize = signal.position_size?.size_percent || 2.0;
+  const riskPerTrade = signal.position_size?.risk_per_trade || 2.0;
+
+  // --- СТИЛІ ---
+  const signalColor = isLong ? 'green' : isNeutral ? 'yellow' : 'red';
+  const colorClasses = {
+    green: {
+      bg: 'bg-green-900/20',
+      border: 'border-green-700/50',
+      text: 'text-green-400',
+      gradient: 'from-green-600 to-emerald-600'
+    },
+    yellow: {
+      bg: 'bg-yellow-900/20', 
+      border: 'border-yellow-700/50',
+      text: 'text-yellow-400',
+      gradient: 'from-yellow-600 to-amber-600'
+    },
+    red: {
+      bg: 'bg-red-900/20',
+      border: 'border-red-700/50',
+      text: 'text-red-400',
+      gradient: 'from-red-600 to-red-700'
+    }
   };
   
-  const signalStrength = translateSignalStrength(signal.signal_strength);
-  const probabilityStrength = getStrengthFromProbability(successProbability);
-  const confidencePercent = Math.round(signal.confidence * 100);
-
-  // Функція для розрахунку відсотків
-  const calculatePercentage = (entry: number, target: number, isProfit: boolean): string => {
-    const change = ((target - entry) / entry) * 100;
-    const sign = change >= 0 ? '+' : '';
-    const emoji = isProfit ? '📈' : '📉';
-    return `${emoji} ${sign}${change.toFixed(2)}%`;
-  };
-
-  // Оцінка якості сигналу
-  const getSignalQuality = () => {
-    const rrRatio = signal.risk_reward ? Number(signal.risk_reward) : 3.01;
-    
-    if (winChance >= 65 && riskData.score <= 30 && rrRatio >= 2.5) {
-      return { text: 'Високоякісний', color: 'text-green-400', icon: '🏆', desc: 'Чудове співвідношення ризик/прибуток' };
-    }
-    if (winChance >= 60 && riskData.score <= 40 && rrRatio >= 2.0) {
-      return { text: 'Добрий', color: 'text-blue-400', icon: '👍', desc: 'Гарні умови для торгівлі' };
-    }
-    if (winChance >= 55 || (winChance >= 50 && rrRatio >= 3.0)) {
-      return { text: 'Середній', color: 'text-yellow-400', icon: '🤔', desc: 'Можна розглянути з обережністю' };
-    }
-    return { text: 'Ризикований', color: 'text-red-400', icon: '⚠️', desc: 'Високий ризик або низькі шанси' };
-  };
-
-  const signalQuality = getSignalQuality();
-
-  // Аналіз факторів для пояснення
-  const analyzeFactors = () => {
-    const factors = signal.factors || {};
-    const positive = Object.entries(factors).filter(([key, value]) => {
-      const interpretation = interpretFactorValue(key, value);
-      return interpretation.color === 'text-green-400';
-    }).length;
-    
-    const neutral = Object.entries(factors).filter(([key, value]) => {
-      const interpretation = interpretFactorValue(key, value);
-      return interpretation.color === 'text-yellow-400';
-    }).length;
-    
-    const negative = Object.entries(factors).filter(([key, value]) => {
-      const interpretation = interpretFactorValue(key, value);
-      return interpretation.color === 'text-red-400';
-    }).length;
-    
-    return { positive, neutral, negative };
-  };
-
-  const factorAnalysis = analyzeFactors();
+  const colors = colorClasses[signalColor];
 
   return (
-    <div className="space-y-6">
-      {/* Заголовок сигналу */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h3 className={`text-2xl font-bold ${directionColor}`}>
-            {directionEmoji} {signal.symbol}
-          </h3>
-          <p className="text-gray-400">AI сигнал на основі ринкового аналізу</p>
-        </div>
-        
-        <div className="flex items-center gap-4">
-          <div className={`px-4 py-2 ${probabilityStrength.color.replace('text-', 'bg-')}/20 rounded-full border ${probabilityStrength.color.replace('text-', 'border-')}/30`}>
-            <span className="font-bold">{probabilityStrength.emoji} {winChance}%</span>
-            <span className="text-gray-300 ml-2">шанс на успіх</span>
+    <div className="space-y-4">
+      {/* ===== ЗАГОЛОВОК СИГНАЛУ ===== */}
+      <div className={`p-4 rounded-xl ${colors.bg} border ${colors.border}`}>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-3">
+            <div className={`text-2xl ${colors.text}`}>
+              {isLong ? '📈' : isNeutral ? '⚖️' : '📉'}
+            </div>
+            <div>
+              <h3 className={`text-xl font-bold ${colors.text}`}>
+                {isLong ? 'LONG' : isNeutral ? 'NEUTRAL' : 'SHORT'} {signal.symbol}
+              </h3>
+              <p className="text-sm text-gray-400">
+                TF: {signal.timeframe} • AI: {confidence}% • R/R: 1:{realRR}
+              </p>
+            </div>
+          </div>
+          
+          {/* Поточна ціна */}
+          <div className="text-right">
+            <div className="text-lg font-bold">${formatPrice(currentPrice)}</div>
+            <div className="text-sm text-gray-400">Поточна ціна</div>
           </div>
         </div>
+        
+        {/* Пояснення */}
+        {signal.explanation && (
+          <div className="mt-3 pt-3 border-t border-gray-700/50">
+            <p className="text-sm text-gray-300">{signal.explanation.split('\n')[0]}</p>
+          </div>
+        )}
       </div>
 
-      {/* Ціни: Entry, TP, SL */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-gray-700 p-4 rounded-lg">
-          <div className="text-gray-400 text-sm mb-1">Вхідна ціна</div>
-          <div className="text-2xl font-bold">${parseFloat(signal.entry_price).toFixed(2)}</div>
-        </div>
-        
-        <div className="bg-green-900/20 p-4 rounded-lg border border-green-800/50">
-          <div className="text-gray-400 text-sm mb-1">Take Profit</div>
-          <div className="text-2xl font-bold text-green-400">
-            ${parseFloat(signal.take_profit).toFixed(2)}
-          </div>
-          <div className="text-sm text-green-300 mt-1">
-            {calculatePercentage(signal.entry_price, signal.take_profit, isLong)}
-          </div>
-        </div>
-        
-        <div className="bg-red-900/20 p-4 rounded-lg border border-red-800/50">
-          <div className="text-gray-400 text-sm mb-1">Stop Loss</div>
-          <div className="text-2xl font-bold text-red-400">
-            ${parseFloat(signal.stop_loss).toFixed(2)}
-          </div>
-          <div className="text-sm text-red-300 mt-1">
-            {calculatePercentage(signal.entry_price, signal.stop_loss, !isLong)}
-          </div>
-        </div>
-      </div>
-
-      {/* Статистика успіху */}
-      <div className="bg-gray-800/50 p-4 rounded-lg">
-        <h4 className="font-bold mb-3 flex items-center">
-          <span className="mr-2">📈</span> Статистика успіху
-        </h4>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="text-center p-3 bg-gray-900/30 rounded">
-            <div className="text-gray-400 text-sm mb-1">Шанс на успіх</div>
-            <div className={`text-2xl font-bold ${probabilityStrength.color}`}>
-              {winChance}%
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-              {winChance >= 60 ? 'Високий' : winChance >= 50 ? 'Помірний' : 'Низький'} шанс
-            </div>
-          </div>
-          
-          <div className="text-center p-3 bg-gray-900/30 rounded">
-            <div className="text-gray-400 text-sm mb-1">Ризик збитків</div>
-            <div className={`text-2xl font-bold ${lossChance > 50 ? 'text-red-400' : 'text-yellow-400'}`}>
-              {lossChance}%
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-              {lossChance > 60 ? 'Високий' : lossChance > 40 ? 'Помірний' : 'Низький'} ризик
-            </div>
-          </div>
-          
-          <div className="text-center p-3 bg-gray-900/30 rounded">
-            <div className="text-gray-400 text-sm mb-1">Оцінка ризику</div>
-            <div className={`text-2xl font-bold ${riskData.score > 60 ? 'text-red-400' : riskData.score > 40 ? 'text-yellow-400' : 'text-green-400'}`}>
-              {riskData.score}/100
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-              {riskData.description} ризик
-            </div>
-          </div>
-          
-          <div className="text-center p-3 bg-gray-900/30 rounded">
-            <div className="text-gray-400 text-sm mb-1">Якість сигналу</div>
-            <div className={`text-xl font-bold ${signalQuality.color}`}>
-              {signalQuality.icon} {signalQuality.text}
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-              {factorAnalysis.positive} 🟢 / {factorAnalysis.neutral} 🟡 / {factorAnalysis.negative} 🔴
-            </div>
-          </div>
-        </div>
-        
-        {/* Прогрес бар для візуалізації шансів */}
-        <div className="mt-4">
-          <div className="flex justify-between text-sm text-gray-400 mb-1">
-            <span>🔴 Шанс на збиток: {lossChance}%</span>
-            <span>🟢 Шанс на прибуток: {winChance}%</span>
-          </div>
-          <div className="w-full h-6 bg-gray-700 rounded-full overflow-hidden flex">
-            <div 
-              className="h-full bg-red-500 transition-all duration-500"
-              style={{ width: `${lossChance}%` }}
-              title={`${lossChance}% шанс досягнення Stop Loss`}
-            ></div>
-            <div 
-              className="h-full bg-green-500 transition-all duration-500"
-              style={{ width: `${winChance}%` }}
-              title={`${winChance}% шанс досягнення Take Profit`}
-            ></div>
-          </div>
-          <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>Досягнення SL ({lossChance}%)</span>
-            <span>Досягнення TP ({winChance}%)</span>
-          </div>
-        </div>
-        
-        {/* Пояснення результатів */}
-        <div className="mt-4 p-3 bg-gray-900/30 rounded">
-          <div className="text-sm text-gray-300">
-            <span className="font-medium">Аналіз сигналу:</span> 
-            <span className="ml-2">
-              {factorAnalysis.positive} позитивних, {factorAnalysis.neutral} нейтральних, {factorAnalysis.negative} негативних факторів.
-              {winChance >= 60 ? ' Сигнал має високі шанси на успіх.' : 
-               winChance >= 50 ? ' Сигнал має помірні шанси.' : 
-               ' Сигнал має низькі шанси, рекомендується обережність.'}
+      {/* ===== ОСНОВНІ МЕТРИКИ ===== */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* Шанс успіху */}
+        <div className="bg-gray-800/50 p-3 rounded-xl">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm text-gray-400">Шанс успіху</span>
+            <span className={`text-sm font-bold ${successProb >= 70 ? 'text-green-400' : successProb >= 60 ? 'text-yellow-400' : 'text-red-400'}`}>
+              {successProb}%
             </span>
           </div>
+          <div className="w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
+            <div 
+              className={`h-full ${successProb >= 70 ? 'bg-green-500' : successProb >= 60 ? 'bg-yellow-500' : 'bg-red-500'}`}
+              style={{ width: `${successProb}%` }}
+            ></div>
+          </div>
+        </div>
+        
+        {/* Очікуваний прибуток */}
+        <div className="bg-gray-800/50 p-3 rounded-xl">
+          <div className="text-sm text-gray-400 mb-1">Очікуваний прибуток</div>
+          <div className={`text-xl font-bold ${expectedProfit > 1 ? 'text-green-400' : expectedProfit > 0 ? 'text-yellow-400' : 'text-red-400'}`}>
+            {expectedProfit > 0 ? '+' : ''}{expectedProfit}%
+          </div>
         </div>
       </div>
 
-      {/* Пояснення AI */}
-      {signal.explanation && (
-        <div className="bg-gray-700/50 p-4 rounded-lg">
-          <h4 className="font-bold mb-2 flex items-center">
-            <span className="mr-2">🧠</span> Логіка AI
-          </h4>
-          <p className="text-gray-300">{signal.explanation}</p>
+      {/* ===== ЦІНИ ТА ТОЧКИ ===== */}
+      {!isNeutral ? (
+        <>
+          {/* Точка входу */}
+          <div className="bg-gray-800/30 p-3 rounded-xl">
+            <div className="text-sm text-gray-400 mb-2">🎯 Точка входу</div>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs text-gray-400">Рекомендована</div>
+                <div className="text-lg font-bold">${formatPrice(entryPrice)}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-xs text-gray-400">Відхилення</div>
+                <div className={`text-sm ${currentPrice > entryPrice ? 'text-green-400' : 'text-red-400'}`}>
+                  {calculatePercentage(entryPrice, currentPrice)}
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* TP/SL */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-green-900/20 p-3 rounded-xl border border-green-700/50">
+              <div className="text-sm text-gray-400 mb-1">Take Profit</div>
+              <div className="text-lg font-bold text-green-400">${formatPrice(takeProfit)}</div>
+              <div className="text-sm text-green-400">{calculatePercentage(entryPrice, takeProfit)}</div>
+            </div>
+            
+            <div className="bg-red-900/20 p-3 rounded-xl border border-red-700/50">
+              <div className="text-sm text-gray-400 mb-1">Stop Loss</div>
+              <div className="text-lg font-bold text-red-400">${formatPrice(stopLoss)}</div>
+              <div className="text-sm text-red-400">{calculatePercentage(entryPrice, stopLoss)}</div>
+            </div>
+          </div>
+          
+          {/* Прогрес бар для TP/SL */}
+          <div className="relative h-8 bg-gray-800 rounded-xl overflow-hidden">
+            {/* SL зона */}
+            <div 
+              className="absolute left-0 h-full bg-red-900/30"
+              style={{ width: `${Math.min(30, (Math.abs(stopLoss - entryPrice) / Math.abs(takeProfit - entryPrice)) * 50)}%` }}
+            ></div>
+            
+            {/* Поточна ціна маркер */}
+            <div 
+              className="absolute top-0 bottom-0 w-0.5 bg-white"
+              style={{ left: `${((currentPrice - stopLoss) / (takeProfit - stopLoss)) * 100}%` }}
+            >
+              <div className="absolute -top-2 -left-1.5 w-3 h-3 bg-white rounded-full"></div>
+            </div>
+            
+            {/* TP зона */}
+            <div 
+              className="absolute right-0 h-full bg-green-900/30"
+              style={{ width: `${Math.min(30, 100 - ((currentPrice - stopLoss) / (takeProfit - stopLoss)) * 100)}%` }}
+            ></div>
+            
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="text-sm font-bold">
+                Поточна: ${formatPrice(currentPrice)}
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="bg-yellow-900/20 p-4 rounded-xl border border-yellow-700/50 text-center">
+          <div className="text-2xl mb-2">⚖️</div>
+          <h4 className="font-bold text-yellow-400 mb-1">НЕЙТРАЛЬНИЙ СИГНАЛ</h4>
+          <p className="text-sm text-gray-300">AI не виявив чітких торгових можливостей</p>
         </div>
       )}
 
-      {/* Рекомендація */}
-      <div className={`p-4 rounded-lg ${winChance >= 60 ? 'bg-green-900/20 border border-green-800/50' : 
-                                             winChance >= 50 ? 'bg-yellow-900/20 border border-yellow-800/50' : 
-                                             'bg-red-900/20 border border-red-800/50'}`}>
-        <div className="flex items-start">
-          <span className="text-2xl mr-3 mt-1">
-            {winChance >= 65 ? '✅' : 
-             winChance >= 55 ? '🤔' : 
-             winChance >= 45 ? '⚠️' : '❌'}
-          </span>
+      {/* ===== РИЗИК-МЕНЕДЖМЕНТ ===== */}
+      <div className="bg-gray-800/30 p-3 rounded-xl">
+        <div className="text-sm text-gray-400 mb-2">🛡️ Ризик-менеджмент</div>
+        
+        <div className="grid grid-cols-2 gap-3 mb-3">
           <div>
-            <h4 className="font-bold text-lg mb-1">
-              {winChance >= 65 ? 'Рекомендовано до торгівлі' : 
-               winChance >= 55 ? 'Можна розглянути' : 
-               winChance >= 45 ? 'Обережно' : 'Не рекомендується'}
-            </h4>
-            <p className="text-gray-300">
-              {winChance >= 65 ? 
-                `З ${winChance}% ймовірністю успіху та співвідношенням ризик/прибуток 1:${signal.risk_reward || '3.01'}, цей сигнал має високі шанси на прибуток.` :
-               winChance >= 55 ?
-                `З ${winChance}% ймовірністю успіху. Можна розглянути угоду з меншим розміром позиції.` :
-               winChance >= 45 ?
-                `З ${winChance}% ймовірністю успіху. Рекомендується почекати кращих умов або використовувати дуже малий розмір позиції.` :
-                `Лише ${winChance}% ймовірність успіху. Рекомендується утриматись від торгівлі за цим сигналом.`
-              }
-            </p>
-            {signal.risk_reward && Number(signal.risk_reward) >= 2.5 && (
-              <p className="text-green-300 text-sm mt-2">
-                🎯 Чудове співвідношення ризик/прибуток (1:{signal.risk_reward}) компенсує нижчі шанси успіху.
-              </p>
-            )}
+            <div className="text-xs text-gray-400">Розмір позиції</div>
+            <div className={`text-lg font-bold ${positionSize > 0 ? 'text-blue-400' : 'text-gray-400'}`}>
+              {positionSize}%
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-400">Ризик на угоду</div>
+            <div className="text-lg font-bold text-yellow-400">
+              {riskPerTrade}%
+            </div>
           </div>
         </div>
+        
+        {positionSize > 0 && (
+          <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
+            <div 
+              className="h-full bg-gradient-to-r from-blue-500 to-blue-600"
+              style={{ width: `${Math.min(positionSize * 20, 100)}%` }}
+            ></div>
+          </div>
+        )}
       </div>
 
-      {/* Кнопки дій */}
-      <div className="flex flex-col sm:flex-row gap-3 pt-4">
+      {/* ===== ФАКТОРИ АНАЛІЗУ ===== */}
+      <div className="space-y-3">
+        <button
+          onClick={() => setShowFactors(!showFactors)}
+          className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm flex items-center justify-center gap-2"
+        >
+          <span>{showFactors ? '▲' : '▼'}</span>
+          <span>{showFactors ? 'Сховати фактори' : '📊 Показати фактори аналізу'}</span>
+        </button>
+        
+        {showFactors && signal.factors && (
+          <div className="bg-gray-800/30 p-3 rounded-xl">
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(signal.factors)
+                .filter(([key]) => !key.includes('ema_alignment')) // Прибираємо довгі значення
+                .map(([key, value]) => {
+                  const interpretation = interpretValue(key, value);
+                  return (
+                    <div key={key} className="text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-400">{translateFactorKey(key)}</span>
+                        <span className={`font-medium ${interpretation.color} flex items-center gap-1`}>
+                          {interpretation.icon} {typeof value === 'number' ? 
+                            (key.includes('level') || key.includes('rsi') || key.includes('cci') || key.includes('williams') ? 
+                              value.toFixed(1) : 
+                              value.toFixed(2)) : 
+                            String(value)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+        
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="w-full py-2.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm"
+        >
+          {showDetails ? 'Сховати деталі' : '📈 Показати деталі'}
+        </button>
+      </div>
+
+      {/* ===== ДЕТАЛІ ===== */}
+      {showDetails && (
+        <div className="space-y-3">
+          {/* Підтримка/Опір */}
+          {signal.support_resistance && (
+            <div className="bg-gray-800/30 p-3 rounded-xl">
+              <div className="text-sm text-gray-400 mb-2">📉 Підтримка та опір</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-xs text-gray-400">Найближча підтримка</div>
+                  <div className="text-sm font-bold text-green-400">
+                    ${signal.support_resistance.nearest_support ? formatPrice(signal.support_resistance.nearest_support) : '-'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-400">Найближчий опір</div>
+                  <div className="text-sm font-bold text-red-400">
+                    ${signal.support_resistance.nearest_resistance ? formatPrice(signal.support_resistance.nearest_resistance) : '-'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* Цінова дія */}
+          {signal.price_action && (
+            <div className="bg-gray-800/30 p-3 rounded-xl">
+              <div className="text-sm text-gray-400 mb-2">🕯️ Цінова дія</div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                {signal.price_action.higher_highs !== undefined && (
+                  <div>
+                    <div className="text-gray-400">Higher Highs</div>
+                    <div className={`font-bold ${signal.price_action.higher_highs >= 2 ? 'text-green-400' : 'text-gray-400'}`}>
+                      {signal.price_action.higher_highs}
+                    </div>
+                  </div>
+                )}
+                {signal.price_action.lower_lows !== undefined && (
+                  <div>
+                    <div className="text-gray-400">Lower Lows</div>
+                    <div className={`font-bold ${signal.price_action.lower_lows >= 2 ? 'text-red-400' : 'text-gray-400'}`}>
+                      {signal.price_action.lower_lows}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ===== КНОПКА ВІДСТЕЖЕННЯ ===== */}
+      <div className="pt-2">
         <button
           onClick={onTrack}
-          disabled={loading}
-          className={`flex-1 py-3 rounded-lg font-bold transition-all ${
-            loading 
-              ? 'bg-gray-700 cursor-not-allowed' 
-              : winChance >= 60 
-                ? 'bg-green-600 hover:bg-green-700 active:scale-95'
-                : winChance >= 50
-                ? 'bg-yellow-600 hover:bg-yellow-700 active:scale-95'
-                : 'bg-red-600 hover:bg-red-700 active:scale-95'
+          disabled={loading || isNeutral || successProb < 60 || realRR < 1.5}
+          className={`w-full py-3 rounded-xl font-bold text-lg transition-all ${
+            isNeutral || successProb < 60 || realRR < 1.5
+              ? 'bg-gray-800 text-gray-400 cursor-not-allowed'
+              : `bg-gradient-to-r ${colors.gradient} hover:opacity-90 hover:scale-[1.02]`
           }`}
         >
           {loading ? (
             <span className="flex items-center justify-center">
-              <span className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></span>
-              Створення...
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+              Завантаження...
             </span>
+          ) : isNeutral ? (
+            '⚖️ Очікувати кращих умов'
+          ) : successProb < 60 ? (
+            '🔴 Маленький шанс успіху'
+          ) : realRR < 1.5 ? (
+            '🔴 Погане R/R співвідношення'
           ) : (
             <span className="flex items-center justify-center">
-              <span className="mr-2">🎯</span> 
-              {winChance >= 60 ? 'ВІДСТЕЖУВАТИ СИГНАЛ' :
-               winChance >= 50 ? 'ВІДСТЕЖУВАТИ (обережно)' : 
-               'ВІДСТЕЖУВАТИ (ризиковано)'}
+              <span className="mr-2">🎯</span>
+              Відстежувати сигнал
             </span>
           )}
         </button>
-        
-        <button
-          onClick={() => window.location.reload()}
-          className="flex-1 py-3 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition-colors"
-        >
-          <span className="flex items-center justify-center">
-            <span className="mr-2">🔄</span> Новий аналіз
-          </span>
-        </button>
+      </div>
+
+      {/* ===== ПІДВАЛ ===== */}
+      <div className="text-center text-xs text-gray-500 pt-3 border-t border-gray-800/50">
+        <div className="flex flex-wrap justify-center gap-3 mb-1">
+          <span>🤖 AI Trading v2.0</span>
+          <span>•</span>
+          <span>📊 150+ свічок</span>
+          <span>•</span>
+          <span>⚡ 20+ індикаторів</span>
+        </div>
+        {signal.valid_until && (
+          <div className="mt-1">
+            ⏰ Дійсний до: {new Date(signal.valid_until).toLocaleTimeString('uk-UA', { 
+              hour: '2-digit', 
+              minute: '2-digit',
+              timeZone: 'Europe/Kiev'
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
