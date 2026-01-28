@@ -3,8 +3,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer, ReferenceLine,
-  Scatter, Legend, ReferenceArea,
-  Label
+  Scatter, Legend, ReferenceArea
 } from 'recharts';
 import { fetchTradeHistory } from '../../services/futuresApi';
 
@@ -63,6 +62,47 @@ const CurrentPriceMarker = (props: any) => {
   );
 };
 
+// Додаткові маркери для TP/SL, якщо вони поза графіком
+const TPLineMarker = (props: any) => {
+  const { x, y, value } = props;
+  return (
+    <g>
+      <circle cx={x} cy={y} r={4} fill="#10B981" stroke="white" strokeWidth={1} />
+      <text 
+        x={x + 10} 
+        y={y} 
+        fill="#10B981" 
+        fontSize={10}
+        fontWeight="bold"
+        textAnchor="start"
+        dy={3}
+      >
+        TP: ${value}
+      </text>
+    </g>
+  );
+};
+
+const SLLineMarker = (props: any) => {
+  const { x, y, value } = props;
+  return (
+    <g>
+      <circle cx={x} cy={y} r={4} fill="#EF4444" stroke="white" strokeWidth={1} />
+      <text 
+        x={x + 10} 
+        y={y} 
+        fill="#EF4444" 
+        fontSize={10}
+        fontWeight="bold"
+        textAnchor="start"
+        dy={3}
+      >
+        SL: ${value}
+      </text>
+    </g>
+  );
+};
+
 const TradeChart: React.FC<TradeChartProps> = ({ trade }) => {
   const [historicalData, setHistoricalData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -89,11 +129,54 @@ const TradeChart: React.FC<TradeChartProps> = ({ trade }) => {
     ? Math.abs(((trade.current_price - trade.stop_loss) / trade.entry_price) * 100)
     : 0;
 
+  // Розрахунок оптимального діапазону для YAxis
+  const yAxisDomain = useMemo(() => {
+    if (!historicalData.length) return ['auto', 'auto'] as [string, string];
+    
+    const prices = historicalData.map(d => d.price);
+    
+    // Всі важливі ціни, які повинні бути видимі
+    const importantPrices = [
+      ...prices,
+      trade.entry_price,
+      trade.current_price,
+      ...(trade.take_profit ? [trade.take_profit] : []),
+      ...(trade.stop_loss ? [trade.stop_loss] : [])
+    ];
+    
+    const minPrice = Math.min(...importantPrices);
+    const maxPrice = Math.max(...importantPrices);
+    const range = maxPrice - minPrice;
+    
+    // Додаємо 15% відступу зверху і знизу
+    const padding = range * 0.15;
+    
+    return [minPrice - padding, maxPrice + padding] as [number, number];
+  }, [historicalData, trade]);
+
+  // Розрахунок, чи лінії TP/SL в межах видимого діапазону
+  const lineVisibility = useMemo(() => {
+    const [minY, maxY] = yAxisDomain;
+    
+    // Перевіряємо чи діапазон - числа (не 'auto')
+    if (typeof minY === 'string' || typeof maxY === 'string') {
+      return { isTPVisible: false, isSLVisible: false };
+    }
+    
+    const isTPVisible = trade.take_profit 
+      ? trade.take_profit >= minY && trade.take_profit <= maxY 
+      : false;
+    const isSLVisible = trade.stop_loss 
+      ? trade.stop_loss >= minY && trade.stop_loss <= maxY 
+      : false;
+    
+    return { isTPVisible, isSLVisible };
+  }, [yAxisDomain, trade.take_profit, trade.stop_loss]);
+
   // Знаходимо точку входу на графіку
   const entryPoint = useMemo(() => {
     if (!historicalData.length) return null;
     
-    // Шукаємо точку найближчу до часу входу
     let closestPoint = historicalData[0];
     let minDiff = Math.abs(new Date(closestPoint.time).getTime() - entryTime.getTime());
     
@@ -145,6 +228,45 @@ const TradeChart: React.FC<TradeChartProps> = ({ trade }) => {
       }
     };
   }, [trade, isLong]);
+
+  // Додаткові точки для TP/SL, якщо вони поза графіком
+  const additionalPoints = useMemo(() => {
+    const points: Array<{
+      type: 'tp_marker' | 'sl_marker';
+      time: string;
+      price: number;
+      x: string;
+      y: number;
+      value: string;
+    }> = [];
+    const latestPoint = historicalData[historicalData.length - 1];
+    
+    if (latestPoint) {
+      if (trade.take_profit && !lineVisibility.isTPVisible) {
+        points.push({
+          type: 'tp_marker',
+          time: latestPoint.time,
+          price: trade.take_profit,
+          x: latestPoint.time,
+          y: trade.take_profit,
+          value: trade.take_profit.toFixed(2)
+        });
+      }
+      
+      if (trade.stop_loss && !lineVisibility.isSLVisible) {
+        points.push({
+          type: 'sl_marker',
+          time: latestPoint.time,
+          price: trade.stop_loss,
+          x: latestPoint.time,
+          y: trade.stop_loss,
+          value: trade.stop_loss.toFixed(2)
+        });
+      }
+    }
+    
+    return points;
+  }, [historicalData, trade, lineVisibility]);
 
   // Custom Tooltip
   const CustomTooltip = ({ active, payload, label }: any) => {
@@ -220,16 +342,25 @@ const TradeChart: React.FC<TradeChartProps> = ({ trade }) => {
   };
 
   const generateSimulationData = () => {
-    const data = [];
+    const data: Array<{
+      time: string;
+      price: number;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      volume: number;
+    }> = [];
     const basePrice = trade.entry_price;
     const symbol = trade.symbol.split('/')[0];
     
-    const volatility = {
+    const volatilityMap: Record<string, number> = {
       'BTC': 0.015, 'ETH': 0.020, 'SOL': 0.030,
       'XRP': 0.025, 'ADA': 0.028, 'BNB': 0.018,
       'AVAX': 0.035, 'DOGE': 0.045, 'LINK': 0.025
-    }[symbol] || 0.025;
+    };
     
+    const volatility = volatilityMap[symbol] || 0.025;
     const trend = 0.01 * (isLong ? 1 : -1);
     
     for (let i = 0; i < 24; i++) {
@@ -394,14 +525,14 @@ const TradeChart: React.FC<TradeChartProps> = ({ trade }) => {
               <YAxis 
                 stroke="#9CA3AF"
                 fontSize={11}
-                domain={['auto', 'auto']}
+                domain={yAxisDomain}  /* Автоматичний діапазон */
                 tickFormatter={(value) => `$${value.toFixed(0)}`}
               />
               
               <Tooltip content={<CustomTooltip />} />
               <Legend />
               
-              {/* Кольорові зони TP/SL */}
+              
               {enhancedZones && (
                 <>
                   <ReferenceArea
@@ -411,6 +542,7 @@ const TradeChart: React.FC<TradeChartProps> = ({ trade }) => {
                     stroke={enhancedZones.tpZone.border}
                     strokeWidth={1}
                     strokeDasharray="3 3"
+                    ifOverflow="extendDomain"
                   />
                   
                   <ReferenceArea
@@ -420,6 +552,7 @@ const TradeChart: React.FC<TradeChartProps> = ({ trade }) => {
                     stroke={enhancedZones.slZone.border}
                     strokeWidth={1}
                     strokeDasharray="3 3"
+                    ifOverflow="extendDomain"
                   />
                 </>
               )}
@@ -430,6 +563,7 @@ const TradeChart: React.FC<TradeChartProps> = ({ trade }) => {
                   x={entryPoint.time}
                   stroke="#3B82F6"
                   strokeWidth={2}
+                  ifOverflow="extendDomain"
                   label={{
                     value: '⏰ ВХІД',
                     position: 'top',
@@ -440,13 +574,14 @@ const TradeChart: React.FC<TradeChartProps> = ({ trade }) => {
                 />
               )}
               
-              {/* Горизонтальні лінії TP/SL */}
+              {/* Горизонтальні лінії TP/SL з ifOverflow */}
               {trade.take_profit && (
                 <ReferenceLine
                   y={trade.take_profit}
                   stroke="#10B981"
                   strokeWidth={2}
                   strokeDasharray="5 5"
+                  ifOverflow="extendDomain"
                   label={{
                     value: `🟢 TP: $${trade.take_profit.toFixed(2)}`,
                     position: 'right',
@@ -463,6 +598,7 @@ const TradeChart: React.FC<TradeChartProps> = ({ trade }) => {
                   stroke="#EF4444"
                   strokeWidth={2}
                   strokeDasharray="5 5"
+                  ifOverflow="extendDomain"
                   label={{
                     value: `🔴 SL: $${trade.stop_loss.toFixed(2)}`,
                     position: 'right',
@@ -479,6 +615,7 @@ const TradeChart: React.FC<TradeChartProps> = ({ trade }) => {
                 stroke="#3B82F6"
                 strokeWidth={2}
                 strokeDasharray="5 5"
+                ifOverflow="extendDomain"
                 label={{
                   value: `ВХІД: $${trade.entry_price.toFixed(2)}`,
                   position: 'right',
@@ -516,6 +653,19 @@ const TradeChart: React.FC<TradeChartProps> = ({ trade }) => {
                   name="Поточна ціна"
                 />
               )}
+              
+              {/* Додаткові маркери для TP/SL поза графіком */}
+              {additionalPoints.map((point, index) => (
+                <Scatter
+                  key={`${point.type}_${index}`}
+                  data={[point]}
+                  shape={point.type === 'tp_marker' ? 
+                    (props: any) => <TPLineMarker {...props} value={point.value} /> :
+                    (props: any) => <SLLineMarker {...props} value={point.value} />
+                  }
+                  name={point.type === 'tp_marker' ? 'TP Маркер' : 'SL Маркер'}
+                />
+              ))}
             </LineChart>
           </ResponsiveContainer>
         </div>
